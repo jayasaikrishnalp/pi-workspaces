@@ -1,0 +1,5 @@
+{"type":"future_event_kind","foo":"bar"}
+{}
+null
+{"type":"message_update"}
+{"type":"message_update","assistantMessageEvent":{"type":"unknown_sub"}}

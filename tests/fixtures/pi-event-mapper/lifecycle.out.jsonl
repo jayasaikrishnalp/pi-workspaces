@@ -1,0 +1,4 @@
+[{"event":"run.start","data":{"runId":"r1","sessionKey":"s1","prompt":"hello"}}]
+[{"event":"turn.start","data":{"runId":"r1","turnId":"t-1"}}]
+[{"event":"turn.end","data":{"runId":"r1","turnId":"t-1"}}]
+[{"event":"run.completed","data":{"runId":"r1","status":"success"}}]

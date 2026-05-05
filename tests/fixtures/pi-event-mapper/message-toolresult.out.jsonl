@@ -1,0 +1,3 @@
+[{"event":"turn.start","data":{"runId":"r1","turnId":"t-1"}}]
+[]
+[{"event":"tool.result","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_1","content":"ok"}}]

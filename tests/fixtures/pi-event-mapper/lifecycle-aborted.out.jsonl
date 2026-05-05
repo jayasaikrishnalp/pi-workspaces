@@ -1,0 +1,2 @@
+[{"event":"run.start","data":{"runId":"r1","sessionKey":"s1","prompt":"hello"}}]
+[{"event":"run.completed","data":{"runId":"r1","status":"cancelled","error":"user requested abort"}}]

@@ -1,0 +1,6 @@
+[{"event":"turn.start","data":{"runId":"r1","turnId":"t-1"}}]
+[{"event":"assistant.start","data":{"runId":"r1","turnId":"t-1","messageId":"m-1"}}]
+[{"event":"assistant.delta","data":{"runId":"r1","turnId":"t-1","messageId":"m-1","delta":"Hel"}}]
+[{"event":"assistant.delta","data":{"runId":"r1","turnId":"t-1","messageId":"m-1","delta":"lo"}}]
+[{"event":"assistant.completed","data":{"runId":"r1","turnId":"t-1","messageId":"m-1","content":"Hello","usage":{"input":100,"output":2,"totalTokens":102}}}]
+[{"event":"turn.end","data":{"runId":"r1","turnId":"t-1"}}]

@@ -1,0 +1,2 @@
+{"type":"agent_start"}
+{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":""}],"stopReason":"error","errorMessage":"upstream provider 503","timestamp":1778003800000}]}

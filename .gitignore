@@ -19,3 +19,6 @@ runs/
 .DS_Store
 .vscode/
 .idea/
+
+# local-only artifacts (review bundles, scratch snapshots)
+review/

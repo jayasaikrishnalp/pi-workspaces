@@ -1,0 +1,4 @@
+{"type":"turn_start"}
+{"type":"tool_execution_start","toolCallId":"toolu_1","toolName":"bash","args":{"command":"echo hi"}}
+{"type":"tool_execution_update","toolCallId":"toolu_1","toolName":"bash","partialResult":{"content":[{"type":"text","text":"hi\n"}],"details":{}}}
+{"type":"tool_execution_end","toolCallId":"toolu_1","toolName":"bash","isError":false,"result":{"content":[{"type":"text","text":"hi\n"}]}}

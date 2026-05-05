@@ -1,0 +1,5 @@
+{"type":"turn_start"}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"part1 "},{"type":"text","text":"part2"}]}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"caption"},{"type":"image","data":"<base64...>","mimeType":"image/png"}]}}
+{"type":"message_end","message":{"role":"user","content":[]}}
+{"type":"message_end","message":{"role":"user","content":"plain string still works"}}

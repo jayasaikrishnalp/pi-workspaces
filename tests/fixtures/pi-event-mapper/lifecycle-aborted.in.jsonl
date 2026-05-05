@@ -1,0 +1,2 @@
+{"type":"agent_start"}
+{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":""}],"stopReason":"aborted","errorMessage":"user requested abort","timestamp":1778003800000}]}

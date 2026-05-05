@@ -1,0 +1,4 @@
+[{"event":"model_change","data":{"runId":"r1","sessionKey":"s1","modelId":"claude-sonnet-4.6","provider":"github-copilot"}}]
+[{"event":"thinking_level_change","data":{"runId":"r1","sessionKey":"s1","level":"high"}}]
+[{"event":"thinking_level_change","data":{"runId":"r1","sessionKey":"s1","level":"medium"}}]
+[{"event":"pi.error","data":{"runId":"r1","code":"X","message":"boom"}}]

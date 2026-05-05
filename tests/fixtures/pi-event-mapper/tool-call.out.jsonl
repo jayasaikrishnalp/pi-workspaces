@@ -1,0 +1,4 @@
+[{"event":"turn.start","data":{"runId":"r1","turnId":"t-1"}}]
+[{"event":"tool.call.start","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_01AJ8SUygkgCXuhED7ttx2is","name":"bash"}}]
+[{"event":"tool.call.delta","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_01AJ8SUygkgCXuhED7ttx2is","argsDelta":""}}]
+[{"event":"tool.call.end","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_01AJ8SUygkgCXuhED7ttx2is","name":"bash","args":{"command":"echo hello-from-pi"}}}]

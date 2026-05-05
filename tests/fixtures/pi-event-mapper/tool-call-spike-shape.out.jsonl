@@ -1,0 +1,4 @@
+[{"event":"turn.start","data":{"runId":"r1","turnId":"t-1"}}]
+[{"event":"tool.call.start","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_1","name":"bash"}}]
+[{"event":"tool.call.delta","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_1","argsDelta":"{\"x\":"}}]
+[{"event":"tool.call.end","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_1","name":"bash","args":{"x":1}}}]

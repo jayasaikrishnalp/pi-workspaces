@@ -1,0 +1,4 @@
+{"type":"model_change","modelId":"claude-sonnet-4.6","provider":"github-copilot"}
+{"type":"thinking_level_changed","level":"high"}
+{"type":"thinking_level_change","thinkingLevel":"medium"}
+{"type":"error","code":"X","message":"boom"}

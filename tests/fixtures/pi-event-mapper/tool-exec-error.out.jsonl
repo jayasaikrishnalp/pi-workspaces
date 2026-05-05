@@ -1,0 +1,2 @@
+[{"event":"turn.start","data":{"runId":"r1","turnId":"t-1"}}]
+[{"event":"tool.exec.end","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_2","ok":false,"error":"command failed: exit 1"}}]

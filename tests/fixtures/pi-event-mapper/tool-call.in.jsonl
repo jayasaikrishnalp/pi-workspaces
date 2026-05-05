@@ -1,0 +1,4 @@
+{"type":"turn_start"}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_start","contentIndex":0,"partial":{"role":"assistant","content":[{"type":"toolCall","id":"toolu_01AJ8SUygkgCXuhED7ttx2is","name":"bash","arguments":{},"partialJson":""}]}}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"","partial":{"role":"assistant","content":[{"type":"toolCall","id":"toolu_01AJ8SUygkgCXuhED7ttx2is","name":"bash","arguments":{},"partialJson":""}]}}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_end","contentIndex":0,"toolCall":{"type":"toolCall","id":"toolu_01AJ8SUygkgCXuhED7ttx2is","name":"bash","arguments":{"command":"echo hello-from-pi"}}}}

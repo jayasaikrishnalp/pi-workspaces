@@ -1,0 +1,4 @@
+[{"event":"turn.start","data":{"runId":"r1","turnId":"t-1"}}]
+[{"event":"tool.exec.start","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_1","name":"bash"}}]
+[{"event":"tool.exec.update","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_1","partial":{"content":[{"type":"text","text":"hi\n"}],"details":{}}}}]
+[{"event":"tool.exec.end","data":{"runId":"r1","turnId":"t-1","toolCallId":"toolu_1","ok":true}}]

@@ -1,0 +1,2 @@
+{"type":"turn_start"}
+{"type":"tool_execution_end","toolCallId":"toolu_2","toolName":"bash","isError":true,"result":"command failed: exit 1"}

@@ -1,0 +1,3 @@
+{"type":"turn_start"}
+{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":0,"partial":{"role":"assistant","content":[]}}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":0,"content":"Hello","partial":{"role":"assistant","content":[]}}}

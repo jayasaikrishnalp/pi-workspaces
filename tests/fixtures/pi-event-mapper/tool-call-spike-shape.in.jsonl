@@ -1,0 +1,4 @@
+{"type":"turn_start"}
+{"type":"message_update","assistantMessageEvent":{"type":"tool_call_start","toolCallId":"toolu_1","name":"bash"}}
+{"type":"message_update","assistantMessageEvent":{"type":"tool_call_delta","toolCallId":"toolu_1","argsDelta":"{\"x\":"}}
+{"type":"message_update","assistantMessageEvent":{"type":"tool_call_end","toolCallId":"toolu_1","name":"bash","args":{"x":1}}}

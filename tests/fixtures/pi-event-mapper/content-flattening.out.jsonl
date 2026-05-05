@@ -1,0 +1,5 @@
+[{"event":"turn.start","data":{"runId":"r1","turnId":"t-1"}}]
+[{"event":"user.message","data":{"runId":"r1","content":"part1 part2"}}]
+[{"event":"user.message","data":{"runId":"r1","content":"caption"}}]
+[{"event":"user.message","data":{"runId":"r1","content":""}}]
+[{"event":"user.message","data":{"runId":"r1","content":"plain string still works"}}]

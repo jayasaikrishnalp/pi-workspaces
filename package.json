@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "test:smoke": "node --test tests/*.smoke.mjs"
+    "test:smoke": "node --import tsx --test tests/*.smoke.mjs",
+    "test:unit": "node --import tsx --test tests/*.test.mjs",
+    "test": "node --import tsx --test tests/*.test.mjs tests/*.smoke.mjs"
   },
   "author": "WK CloudOps Hackathon",
   "license": "UNLICENSED",
