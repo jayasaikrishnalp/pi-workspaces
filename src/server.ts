@@ -32,6 +32,12 @@ import {
   CONFLUENCE_SEARCH_PATH,
   CONFLUENCE_PAGE_PATTERN,
 } from './routes/confluence.js'
+import {
+  handleSkillsCreate,
+  handleKbSkillGet,
+  SKILLS_CREATE_PATH,
+  KB_SKILL_GET_PATTERN,
+} from './routes/skills.js'
 
 export const VERSION = '0.1.0'
 export const DEFAULT_PORT = 8766
@@ -63,6 +69,10 @@ const ROUTES: Route[] = [
   // Stage 5 routes — Confluence search + page fetch (10-point hardened).
   { method: 'POST', pattern: CONFLUENCE_SEARCH_PATH, handler: handleConfluenceSearch },
   { method: 'GET', pattern: CONFLUENCE_PAGE_PATTERN, handler: handleConfluencePage },
+
+  // Stage 6 routes — skill creation + read.
+  { method: 'POST', pattern: SKILLS_CREATE_PATH, handler: handleSkillsCreate },
+  { method: 'GET', pattern: KB_SKILL_GET_PATTERN, handler: handleKbSkillGet },
 ]
 
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
