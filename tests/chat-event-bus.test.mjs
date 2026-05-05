@@ -40,15 +40,22 @@ test('unsubscribe stops further deliveries', () => {
 })
 
 test('a misbehaving subscriber does not stop other subscribers from receiving', () => {
-  const bus = new ChatEventBus()
-  const ok = []
-  bus.subscribe(() => {
-    throw new Error('boom')
-  })
-  bus.subscribe((e) => ok.push(e.meta.seq))
-  bus.emit(fake(1))
-  bus.emit(fake(2))
-  assert.deepStrictEqual(ok, [1, 2])
+  // Silence the bus's diagnostic console.error during this test.
+  const origErr = console.error
+  console.error = () => {}
+  try {
+    const bus = new ChatEventBus()
+    const ok = []
+    bus.subscribe(() => {
+      throw new Error('boom')
+    })
+    bus.subscribe((e) => ok.push(e.meta.seq))
+    bus.emit(fake(1))
+    bus.emit(fake(2))
+    assert.deepStrictEqual(ok, [1, 2])
+  } finally {
+    console.error = origErr
+  }
 })
 
 test('a handler unsubscribing during emit does not break peer delivery', () => {

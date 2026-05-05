@@ -5,11 +5,11 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "test:smoke": "node --import tsx --test tests/*.smoke.mjs",
-    "test:unit": "node --import tsx --test tests/*.test.mjs",
-    "test:integration": "node --import tsx --test tests/integration/*.smoke.mjs",
-    "test": "node --import tsx --test tests/*.test.mjs tests/*.smoke.mjs",
-    "test:all": "node --import tsx --test tests/*.test.mjs tests/*.smoke.mjs tests/integration/*.smoke.mjs"
+    "test:smoke": "node --import tsx --test --test-concurrency=1 tests/*.smoke.mjs",
+    "test:unit": "node --import tsx --test --test-concurrency=1 tests/*.test.mjs",
+    "test:integration": "node --import tsx --test --test-concurrency=1 tests/integration/*.smoke.mjs",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.mjs tests/*.smoke.mjs",
+    "test:all": "node --import tsx --test --test-concurrency=1 tests/*.test.mjs tests/*.smoke.mjs tests/integration/*.smoke.mjs"
   },
   "author": "WK CloudOps Hackathon",
   "license": "UNLICENSED",
