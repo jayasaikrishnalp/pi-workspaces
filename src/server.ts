@@ -1,26 +1,52 @@
 /**
- * pi-workspace-server — Stage 0
- * HTTP listener with /api/health and structured 404/405.
+ * pi-workspace-server
  *
- * Spec: openspec/changes/add-server-skeleton/specs/{server,health}/spec.md
- * Locked spec: cloudops-workspace-spec.md §2.6 (error shape) and §3 (API surface).
+ * Stage 0: HTTP listener with /api/health and structured 404/405.
+ * Stage 2: pi-rpc bridge + chat event bus + run store + sessions/runs/send-stream/chat-events routes.
+ *
+ * Spec: openspec/specs/{server,health}/spec.md and openspec/changes/add-pi-rpc-bridge/specs/**.
  */
 
 import http, { type IncomingMessage, type ServerResponse } from 'node:http'
 import path from 'node:path'
 import url from 'node:url'
 
+import {
+  jsonError as jsonErrorHelper,
+  matchPath,
+  parsePath as parsePathHelper,
+} from './server/http-helpers.js'
+import { getWiring, type Wiring } from './server/wiring.js'
+import {
+  handleSessionsCreate,
+  handleSessionsList,
+  handleActiveRun,
+} from './routes/sessions.js'
+import { handleSendStream, SEND_STREAM_PATH } from './routes/send-stream.js'
+import { handleChatEvents, CHAT_EVENTS_PATH } from './routes/chat-events.js'
+import { handleRunEvents, RUNS_EVENTS_PATTERN } from './routes/runs.js'
+
 export const VERSION = '0.1.0'
 export const DEFAULT_PORT = 8766
 
+type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+
 interface Route {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
-  path: string
-  handler: (req: IncomingMessage, res: ServerResponse) => void
+  method: Method
+  pattern: string
+  handler: (req: IncomingMessage, res: ServerResponse, w: Wiring) => void | Promise<void>
 }
 
 const ROUTES: Route[] = [
-  { method: 'GET', path: '/api/health', handler: handleHealth },
+  { method: 'GET', pattern: '/api/health', handler: handleHealth },
+
+  // Stage 2 routes
+  { method: 'POST', pattern: '/api/sessions', handler: handleSessionsCreate },
+  { method: 'GET', pattern: '/api/sessions', handler: handleSessionsList },
+  { method: 'GET', pattern: '/api/sessions/:sessionKey/active-run', handler: handleActiveRun },
+  { method: 'POST', pattern: SEND_STREAM_PATH, handler: handleSendStream },
+  { method: 'GET', pattern: CHAT_EVENTS_PATH, handler: handleChatEvents },
+  { method: 'GET', pattern: RUNS_EVENTS_PATTERN, handler: handleRunEvents },
 ]
 
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
@@ -28,11 +54,6 @@ function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
   res.end(JSON.stringify({ ok: true, version: VERSION }))
 }
 
-/**
- * Emit a structured error matching cloudops-workspace-spec.md §2.6:
- *   { error: { code, message, details?, ts } }
- * `details` is optional in the payload but always allowed.
- */
 function jsonError(
   res: ServerResponse,
   status: number,
@@ -41,43 +62,31 @@ function jsonError(
   details?: Record<string, unknown>,
   extraHeaders: Record<string, string> = {},
 ): void {
-  const body: { code: string; message: string; details?: Record<string, unknown>; ts: number } = {
-    code,
-    message,
-    ts: Date.now(),
-  }
-  if (details !== undefined) body.details = details
-  res.writeHead(status, { 'Content-Type': 'application/json', ...extraHeaders })
-  res.end(JSON.stringify({ error: body }))
+  jsonErrorHelper(res, status, code, message, details, extraHeaders)
 }
 
-/**
- * Robust path extraction: handles relative paths, absolute-form request
- * targets ("http://host/path"), trailing queries, and malformed URLs.
- */
 function parsePath(reqUrl: string | undefined): string {
-  try {
-    return new URL(reqUrl ?? '/', 'http://_').pathname
-  } catch {
-    return '/'
-  }
+  return parsePathHelper(reqUrl)
 }
 
-function dispatch(req: IncomingMessage, res: ServerResponse): void {
+function dispatch(req: IncomingMessage, res: ServerResponse, w: Wiring): void {
   const reqPath = parsePath(req.url)
-  const method = req.method ?? 'GET'
-  const matchesPath = ROUTES.filter((r) => r.path === reqPath)
+  const method = (req.method ?? 'GET') as Method
 
-  if (matchesPath.length === 0) {
+  // Find every route whose pattern matches this path.
+  const matched = ROUTES.map((r) => ({ route: r, params: matchPath(r.pattern, reqPath) }))
+    .filter((m) => m.params != null) as Array<{ route: Route; params: Record<string, string> }>
+
+  if (matched.length === 0) {
     jsonError(res, 404, 'NOT_FOUND', `Unknown path: ${reqPath}`, {
       path: reqPath,
       method,
     })
     return
   }
-  const matchExact = matchesPath.find((r) => r.method === method)
-  if (!matchExact) {
-    const allowed = matchesPath.map((r) => r.method)
+  const exact = matched.find((m) => m.route.method === method)
+  if (!exact) {
+    const allowed = matched.map((m) => m.route.method)
     jsonError(
       res,
       405,
@@ -88,11 +97,23 @@ function dispatch(req: IncomingMessage, res: ServerResponse): void {
     )
     return
   }
-  matchExact.handler(req, res)
+  Promise.resolve(exact.route.handler(req, res, w)).catch((err) => {
+    console.error('[server] handler threw:', err)
+    if (!res.headersSent) {
+      jsonError(res, 500, 'INTERNAL_ERROR', (err as Error).message ?? 'unknown')
+    } else {
+      try {
+        res.end()
+      } catch {
+        // ignore
+      }
+    }
+  })
 }
 
-function startServer(port: number): http.Server {
-  const server = http.createServer(dispatch)
+function startServer(port: number, wiring?: Wiring): http.Server {
+  const w = wiring ?? getWiring()
+  const server = http.createServer((req, res) => dispatch(req, res, w))
   server.on('error', (err) => {
     const e = err as NodeJS.ErrnoException
     console.error(`[server] fatal error: ${e.code ?? ''} ${err.message} (port=${port})`)
@@ -125,10 +146,6 @@ function installShutdown(server: http.Server): void {
   process.on('SIGINT', () => shutdown('SIGINT'))
 }
 
-/**
- * Robust entry-point detection: compare resolved file paths, not URL strings.
- * Handles paths with spaces, symlinks, and platform path encoding.
- */
 function isEntrypoint(): boolean {
   if (!process.argv[1]) return false
   try {
