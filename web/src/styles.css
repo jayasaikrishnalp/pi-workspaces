@@ -1,0 +1,36 @@
+@import 'tailwindcss';
+
+/* CloudOps workspace — minimal dark theme tuned for 2am readability. */
+
+:root {
+  --pi-bg: #09090b;
+  --pi-fg: #f4f4f5;
+  --pi-accent: #38bdf8;
+  --pi-muted: #71717a;
+  --pi-panel: #18181b;
+  --pi-border: #27272a;
+}
+
+html, body { height: 100%; }
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+pre, code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* Custom utilities specific to chat bubbles */
+.bubble {
+  max-width: 65ch;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-block {
+  border: 1px solid var(--pi-border);
+  background: var(--pi-panel);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}

@@ -25,3 +25,7 @@ dist/
 
 # local-only artifacts (review bundles, scratch snapshots)
 review/
+
+# Frontend build artifacts
+web/node_modules/
+web/dist/
