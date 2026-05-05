@@ -25,6 +25,7 @@ import {
 import { handleSendStream, SEND_STREAM_PATH } from './routes/send-stream.js'
 import { handleChatEvents, CHAT_EVENTS_PATH } from './routes/chat-events.js'
 import { handleRunEvents, handleRunAbort, RUNS_EVENTS_PATTERN, RUNS_ABORT_PATTERN } from './routes/runs.js'
+import { handleKbGraph, handleKbEvents, KB_GRAPH_PATH, KB_EVENTS_PATH } from './routes/kb.js'
 
 export const VERSION = '0.1.0'
 export const DEFAULT_PORT = 8766
@@ -48,6 +49,10 @@ const ROUTES: Route[] = [
   { method: 'GET', pattern: CHAT_EVENTS_PATH, handler: handleChatEvents },
   { method: 'GET', pattern: RUNS_EVENTS_PATTERN, handler: handleRunEvents },
   { method: 'POST', pattern: RUNS_ABORT_PATTERN, handler: handleRunAbort },
+
+  // Stage 4 routes — KB graph + filesystem-event channel (separate bus).
+  { method: 'GET', pattern: KB_GRAPH_PATH, handler: handleKbGraph },
+  { method: 'GET', pattern: KB_EVENTS_PATH, handler: handleKbEvents },
 ]
 
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
