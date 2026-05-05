@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# build artifacts
+dist/
+
+# environment / secrets
+.env
+.env.local
+
+# runtime state (workspace-specific)
+.pi-workspace/
+runs/
+
+# logs
+*.log
+
+# editor
+.DS_Store
+.vscode/
+.idea/
