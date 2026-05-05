@@ -26,6 +26,12 @@ import { handleSendStream, SEND_STREAM_PATH } from './routes/send-stream.js'
 import { handleChatEvents, CHAT_EVENTS_PATH } from './routes/chat-events.js'
 import { handleRunEvents, handleRunAbort, RUNS_EVENTS_PATTERN, RUNS_ABORT_PATTERN } from './routes/runs.js'
 import { handleKbGraph, handleKbEvents, KB_GRAPH_PATH, KB_EVENTS_PATH } from './routes/kb.js'
+import {
+  handleConfluenceSearch,
+  handleConfluencePage,
+  CONFLUENCE_SEARCH_PATH,
+  CONFLUENCE_PAGE_PATTERN,
+} from './routes/confluence.js'
 
 export const VERSION = '0.1.0'
 export const DEFAULT_PORT = 8766
@@ -53,6 +59,10 @@ const ROUTES: Route[] = [
   // Stage 4 routes — KB graph + filesystem-event channel (separate bus).
   { method: 'GET', pattern: KB_GRAPH_PATH, handler: handleKbGraph },
   { method: 'GET', pattern: KB_EVENTS_PATH, handler: handleKbEvents },
+
+  // Stage 5 routes — Confluence search + page fetch (10-point hardened).
+  { method: 'POST', pattern: CONFLUENCE_SEARCH_PATH, handler: handleConfluenceSearch },
+  { method: 'GET', pattern: CONFLUENCE_PAGE_PATTERN, handler: handleConfluencePage },
 ]
 
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
@@ -78,6 +88,22 @@ function parsePath(reqUrl: string | undefined): string {
 function dispatch(req: IncomingMessage, res: ServerResponse, w: Wiring): void {
   const reqPath = parsePath(req.url)
   const method = (req.method ?? 'GET') as Method
+
+  // Defense-in-depth: a request like `/api/confluence/page/../../etc/passwd`
+  // gets normalized by the URL parser to `/api/etc/passwd` and would 404
+  // generically — but the locked spec requires 400 INVALID_PAGE_ID for any
+  // path-traversal attempt under that prefix. Inspect the raw URL.
+  const rawUrl = req.url ?? ''
+  if (
+    method === 'GET' &&
+    rawUrl.startsWith('/api/confluence/page/') &&
+    (rawUrl.includes('..') || rawUrl.includes('%2f') || rawUrl.includes('%2F') || rawUrl.includes('%5c') || rawUrl.includes('%5C'))
+  ) {
+    jsonError(res, 400, 'INVALID_PAGE_ID', 'pageId must be numeric', {
+      raw: rawUrl,
+    })
+    return
+  }
 
   // Find every route whose pattern matches this path.
   const matched = ROUTES.map((r) => ({ route: r, params: matchPath(r.pattern, reqPath) }))

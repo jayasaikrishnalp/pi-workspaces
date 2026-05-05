@@ -7,6 +7,7 @@ import { SendRunTracker, getSendRunTracker } from './send-run-tracker.js'
 import { PiRpcBridge, getPiRpcBridge } from './pi-rpc-bridge.js'
 import { KbEventBus, getKbEventBus } from './kb-event-bus.js'
 import { KbWatcher } from './kb-watcher.js'
+import { ConfluenceClient, ALLOWED_BASE_URL } from './confluence-client.js'
 import type { SessionInfo } from '../types/run.js'
 
 export interface Wiring {
@@ -19,6 +20,10 @@ export interface Wiring {
   /** Absolute path to the skills directory under the workspace cwd. */
   skillsDir: string
   watcher: KbWatcher | null
+  /** null when CONFLUENCE_BASE_URL / tokens are missing or misconfigured. */
+  confluence: ConfluenceClient | null
+  confluenceConfigured: boolean
+  confluenceConfigError?: string
 }
 
 export interface WiringOptions {
@@ -59,7 +64,34 @@ export function getWiring(options: WiringOptions = {}): Wiring {
       console.error('[wiring] kb watcher failed to start:', err)
     })
   }
-  const w: Wiring = { bus, runStore, tracker, bridge, sessions, kbBus, skillsDir, watcher }
+  // Lazy Confluence client: only construct if env is configured AND the
+  // base URL matches the allowlist. Failures surface as confluenceConfigError
+  // and the routes return 503 CONFLUENCE_UNAVAILABLE.
+  const confluenceBaseUrl = process.env.CONFLUENCE_BASE_URL ?? ALLOWED_BASE_URL
+  const confluenceEmail = process.env.ATLASSIAN_EMAIL ?? ''
+  const confluenceToken = process.env.ATLASSIAN_API_TOKEN ?? process.env.JIRA_TOKEN ?? ''
+  let confluence: ConfluenceClient | null = null
+  let confluenceConfigured = false
+  let confluenceConfigError: string | undefined
+  if (confluenceBaseUrl && confluenceEmail && confluenceToken) {
+    try {
+      confluence = new ConfluenceClient({
+        baseUrl: confluenceBaseUrl,
+        email: confluenceEmail,
+        apiToken: confluenceToken,
+      })
+      confluenceConfigured = true
+    } catch (err) {
+      confluenceConfigError = (err as Error).message
+    }
+  } else {
+    confluenceConfigError = 'CONFLUENCE_BASE_URL / ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN (or JIRA_TOKEN) not all set'
+  }
+
+  const w: Wiring = {
+    bus, runStore, tracker, bridge, sessions, kbBus, skillsDir, watcher,
+    confluence, confluenceConfigured, confluenceConfigError,
+  }
   globalThis.__wiring = w
   return w
 }
