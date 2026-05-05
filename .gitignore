@@ -10,7 +10,10 @@ dist/
 
 # runtime state (workspace-specific)
 .pi-workspace/
-runs/
+# Note: rooted patterns so the gitignore for runtime run-store doesn't also
+# swallow the openspec/specs/runs/ source-of-truth spec.
+/runs/
+**/.pi-workspace-it-*/
 
 # logs
 *.log
