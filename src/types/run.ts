@@ -1,6 +1,6 @@
 import type { NormalizedEvent } from '../events/types.js'
 
-export type RunStatus = 'running' | 'success' | 'error' | 'cancelled'
+export type RunStatus = 'running' | 'cancelling' | 'success' | 'error' | 'cancelled'
 
 export interface RunMeta {
   runId: string

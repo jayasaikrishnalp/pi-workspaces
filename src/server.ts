@@ -24,7 +24,7 @@ import {
 } from './routes/sessions.js'
 import { handleSendStream, SEND_STREAM_PATH } from './routes/send-stream.js'
 import { handleChatEvents, CHAT_EVENTS_PATH } from './routes/chat-events.js'
-import { handleRunEvents, RUNS_EVENTS_PATTERN } from './routes/runs.js'
+import { handleRunEvents, handleRunAbort, RUNS_EVENTS_PATTERN, RUNS_ABORT_PATTERN } from './routes/runs.js'
 
 export const VERSION = '0.1.0'
 export const DEFAULT_PORT = 8766
@@ -47,6 +47,7 @@ const ROUTES: Route[] = [
   { method: 'POST', pattern: SEND_STREAM_PATH, handler: handleSendStream },
   { method: 'GET', pattern: CHAT_EVENTS_PATH, handler: handleChatEvents },
   { method: 'GET', pattern: RUNS_EVENTS_PATTERN, handler: handleRunEvents },
+  { method: 'POST', pattern: RUNS_ABORT_PATTERN, handler: handleRunAbort },
 ]
 
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {

@@ -21,7 +21,12 @@ async function bootHttp() {
   const bus = new ChatEventBus()
   const runStore = new RunStore({ root: path.join(root, 'runs') })
   const tracker = new SendRunTracker()
-  const bridge = { send: async () => {}, waitForActiveCompletion: async () => {}, shutdown: async () => {} }
+  const bridge = {
+    send: async () => {},
+    waitForActiveCompletion: async () => {},
+    abort: async () => {},
+    shutdown: async () => {},
+  }
   const sessions = new Map()
   globalThis.__wiring = { bus, runStore, tracker, bridge, sessions }
   const net = await import('node:net')

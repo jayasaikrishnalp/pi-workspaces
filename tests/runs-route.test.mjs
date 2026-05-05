@@ -19,10 +19,15 @@ import { ChatEventBus } from '../src/server/chat-event-bus.ts'
 import { SendRunTracker } from '../src/server/send-run-tracker.ts'
 
 function makeFakeBridge() {
+  const calls = { abort: [] }
   return {
     send: async () => {},
     waitForActiveCompletion: async () => {},
+    abort: async (runId) => {
+      calls.abort.push(runId)
+    },
     shutdown: async () => {},
+    _calls: calls,
   }
 }
 
@@ -206,6 +211,96 @@ test('replay-aware channel: unknown runId returns 404', async () => {
   try {
     const res = await fetch(`http://127.0.0.1:${ctx.port}/api/runs/no-such-run/events`)
     assert.equal(res.status, 404)
+  } finally {
+    await ctx.stop()
+  }
+})
+
+// ---- abort route ------------------------------------------------------------
+
+test('POST /api/runs/:runId/abort: unknown run returns 404', async () => {
+  const ctx = await bootHttp()
+  try {
+    const res = await fetch(`http://127.0.0.1:${ctx.port}/api/runs/bogus/abort`, { method: 'POST' })
+    assert.equal(res.status, 404)
+    const body = await res.json()
+    assert.equal(body.error.code, 'UNKNOWN_RUN')
+  } finally {
+    await ctx.stop()
+  }
+})
+
+test('POST /api/runs/:runId/abort: already-finished run returns 200 alreadyFinished', async () => {
+  const ctx = await bootHttp()
+  try {
+    await ctx.runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'hi' })
+    await ctx.runStore.casStatus('r1', ['running'], 'success', { finishedAt: Date.now() })
+    const res = await fetch(`http://127.0.0.1:${ctx.port}/api/runs/r1/abort`, { method: 'POST' })
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    assert.equal(body.alreadyFinished, true)
+    assert.equal(body.status, 'success')
+  } finally {
+    await ctx.stop()
+  }
+})
+
+test('POST /api/runs/:runId/abort: running run flips to cancelling, emits run.cancelling, calls bridge.abort', async () => {
+  const ctx = await bootHttp()
+  try {
+    await ctx.runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'long' })
+    const seen = []
+    ctx.bus.subscribe((e) => seen.push(e.event))
+
+    const res = await fetch(`http://127.0.0.1:${ctx.port}/api/runs/r1/abort`, { method: 'POST' })
+    assert.equal(res.status, 202)
+    const body = await res.json()
+    assert.equal(body.cancelled, true)
+
+    // status flipped
+    assert.equal(await ctx.runStore.getStatus('r1'), 'cancelling')
+    // bus saw run.cancelling
+    assert.ok(seen.includes('run.cancelling'), `expected run.cancelling, saw ${seen.join(',')}`)
+    // fake bridge.abort was called
+    const wiring = globalThis.__wiring
+    assert.deepStrictEqual(wiring.bridge._calls.abort, ['r1'])
+  } finally {
+    await ctx.stop()
+  }
+})
+
+test('POST /api/runs/:runId/abort: idempotent — second call returns 202 (still cancelling)', async () => {
+  const ctx = await bootHttp()
+  try {
+    await ctx.runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'long' })
+    // First abort flips to cancelling.
+    const r1 = await fetch(`http://127.0.0.1:${ctx.port}/api/runs/r1/abort`, { method: 'POST' })
+    assert.equal(r1.status, 202)
+    // Second call while still cancelling — also 202 (idempotent honoring of intent).
+    const r2 = await fetch(`http://127.0.0.1:${ctx.port}/api/runs/r1/abort`, { method: 'POST' })
+    assert.equal(r2.status, 202)
+    const body = await r2.json()
+    assert.equal(body.cancelled, true)
+    // The second call must NOT emit a second run.cancelling event.
+    const events = await ctx.runStore.getEvents('r1')
+    const cancellingCount = events.filter((e) => e.event === 'run.cancelling').length
+    assert.equal(cancellingCount, 1, 'second abort must not duplicate run.cancelling')
+  } finally {
+    await ctx.stop()
+  }
+})
+
+test('POST /api/runs/:runId/abort: agent_end racing CAS — second-after-success returns alreadyFinished', async () => {
+  const ctx = await bootHttp()
+  try {
+    await ctx.runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'task' })
+    // Simulate "agent_end first wins" by flipping straight to success before any abort.
+    await ctx.runStore.casStatus('r1', ['running'], 'success', { finishedAt: Date.now() })
+    const res = await fetch(`http://127.0.0.1:${ctx.port}/api/runs/r1/abort`, { method: 'POST' })
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    assert.equal(body.alreadyFinished, true)
+    assert.equal(body.status, 'success')
   } finally {
     await ctx.stop()
   }

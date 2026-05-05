@@ -11,10 +11,81 @@ import {
   sseComment,
 } from '../server/http-helpers.js'
 import type { EnrichedEvent } from '../types/run.js'
+import { jsonOk } from '../server/http-helpers.js'
 
 export const RUNS_EVENTS_PATTERN = '/api/runs/:runId/events'
+export const RUNS_ABORT_PATTERN = '/api/runs/:runId/abort'
 
 const TERMINAL_STATUSES = new Set(['success', 'error', 'cancelled'])
+
+export async function handleRunAbort(
+  req: IncomingMessage,
+  res: ServerResponse,
+  w: Wiring,
+): Promise<void> {
+  const params = matchPath(RUNS_ABORT_PATTERN, parsePath(req.url))
+  if (!params || !params.runId) {
+    jsonError(res, 404, 'NOT_FOUND', 'unknown abort path')
+    return
+  }
+  const runId: string = params.runId
+
+  const meta = await w.runStore.getMeta(runId)
+  if (!meta) {
+    jsonError(res, 404, 'UNKNOWN_RUN', `run ${runId} does not exist`)
+    return
+  }
+  if (TERMINAL_STATUSES.has(meta.status)) {
+    jsonOk(res, 200, { alreadyFinished: true, status: meta.status })
+    return
+  }
+  if (meta.status === 'cancelling') {
+    // Idempotent: a previous abort is already in progress. Spec response set
+    // is {200 alreadyFinished, 202 cancelled, 404}; we surface this as 202
+    // because cancellation IS in flight — the caller's intent is honored.
+    jsonOk(res, 202, { cancelled: true })
+    return
+  }
+
+  // CAS running → cancelling. If something else (agent_end racing) just
+  // flipped the run to a terminal state, observe that and 200.
+  const flipped = await w.runStore.casStatus(runId, ['running'], 'cancelling')
+  if (!flipped) {
+    const after = await w.runStore.getStatus(runId)
+    if (after && TERMINAL_STATUSES.has(after)) {
+      jsonOk(res, 200, { alreadyFinished: true, status: after })
+      return
+    }
+    // status is now 'cancelling' (concurrent caller beat us). Same outcome.
+    jsonOk(res, 202, { cancelled: true })
+    return
+  }
+
+  // Persist + emit run.cancelling on the bus.
+  const cancellingEvent = {
+    event: 'run.cancelling',
+    data: { runId },
+  }
+  const enriched = await w.runStore.appendNormalized(runId, meta.sessionKey, cancellingEvent)
+  w.bus.emit(enriched)
+
+  // Issue the abort RPC + escalation timers.
+  try {
+    await w.bridge.abort(runId)
+  } catch (err) {
+    const e = err as Error & { code?: string }
+    // If the bridge has no active run for this id (it already cleared because
+    // pi finished in between), report 200 alreadyFinished.
+    if (e.code === 'NO_ACTIVE_RUN') {
+      jsonOk(res, 200, { alreadyFinished: true })
+      return
+    }
+    jsonError(res, 500, 'BRIDGE_FAILURE', `abort failed: ${e.message}`)
+    return
+  }
+
+  jsonOk(res, 202, { cancelled: true })
+}
 
 /**
  * Replay-aware SSE handler. Implements the queueing → streaming pattern

@@ -17,6 +17,13 @@ interface ActiveRun {
   /** Set as soon as a terminating event has been observed/synthesized for this run.
    *  Guards against double termination (e.g. real run.completed + child exit racing). */
   terminalized: boolean
+  /** Set when abort() has been called for this run, even if meta.json hasn't
+   *  flipped to 'cancelling' yet. Guards the terminalize() path so that an exit
+   *  during a fast abort lands as 'cancelled', not 'error'. */
+  abortRequested: boolean
+  /** Timers armed by abort() for the SIGTERM/SIGKILL escalation. Cleared in finishActive(). */
+  killTermTimer?: NodeJS.Timeout
+  killForceTimer?: NodeJS.Timeout
   completed: Promise<void>
   resolveCompleted: () => void
 }
@@ -63,6 +70,7 @@ export class PiRpcBridge {
       state: { ...INITIAL_STATE },
       ctx: this.makeCtx(args.runId, args.sessionKey, args.prompt),
       terminalized: false,
+      abortRequested: false,
       completed,
       resolveCompleted,
     }
@@ -78,6 +86,63 @@ export class PiRpcBridge {
   async waitForActiveCompletion(): Promise<void> {
     if (!this.active) return
     return this.active.completed
+  }
+
+  /**
+   * Issue an abort for the in-flight run. Writes the abort RPC to pi's stdin,
+   * then arms SIGTERM (3s) / SIGKILL (4s) escalation timers against the pi
+   * process group. Both timers clear if pi exits cleanly first.
+   *
+   * Throws NO_ACTIVE_RUN if the requested runId is not the in-flight run.
+   */
+  async abort(runId: string): Promise<void> {
+    if (this.terminated) throw new Error('BRIDGE_TERMINATED')
+    const active = this.active
+    if (!active || active.runId !== runId) {
+      const err = new Error('NO_ACTIVE_RUN')
+      ;(err as Error & { code?: string }).code = 'NO_ACTIVE_RUN'
+      throw err
+    }
+    const child = this.child
+    if (!child || !child.stdin) {
+      throw new Error('BRIDGE_HAS_NO_CHILD')
+    }
+    // Mark the request immediately so a fast exit (before route's CAS lands)
+    // still terminalizes as cancelled, not error.
+    active.abortRequested = true
+
+    // 1) Send abort command on stdin.
+    const cmd = JSON.stringify({ id: `abort-${runId}`, type: 'abort' })
+    child.stdin.write(cmd + '\n')
+
+    // 2) Arm escalation timers against the pi process group.
+    const pid = child.pid
+    if (typeof pid === 'number' && pid > 0) {
+      active.killTermTimer = setTimeout(() => {
+        if (this.active !== active) return
+        try {
+          process.kill(-pid, 'SIGTERM')
+        } catch (err) {
+          // ESRCH = process already gone; benign.
+          const code = (err as NodeJS.ErrnoException).code
+          if (code !== 'ESRCH') {
+            console.error('[pi-rpc-bridge] SIGTERM failed:', err)
+          }
+        }
+      }, 3_000).unref()
+
+      active.killForceTimer = setTimeout(() => {
+        if (this.active !== active) return
+        try {
+          process.kill(-pid, 'SIGKILL')
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code
+          if (code !== 'ESRCH') {
+            console.error('[pi-rpc-bridge] SIGKILL failed:', err)
+          }
+        }
+      }, 4_000).unref()
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -187,9 +252,20 @@ export class PiRpcBridge {
             active.sessionKey,
             norm,
           )
+          // Accept BOTH 'running' and 'cancelling' as expected so that an
+          // abort racing the natural agent_end is handled correctly:
+          //   - if agent_end wins the race, status flips running → success
+          //   - if abort flipped to cancelling first, run.completed flips
+          //     cancelling → cancelled (mapper produces status:"cancelled"
+          //     from agent_end stopReason:"aborted")
+          //   - if natural agent_end arrives but the run is already cancelling,
+          //     the CAS still flips cancelling → success only if the mapper's
+          //     status is 'success' — but that's rare. The locked spec says
+          //     "agent_end first wins" — and the first-writer-wins guarantee
+          //     of CAS preserves whichever transition lands first.
           await this.deps.runStore.casStatus(
             active.runId,
-            ['running'],
+            ['running', 'cancelling'],
             status as 'success' | 'error' | 'cancelled',
             { finishedAt: Date.now(), error },
           )
@@ -223,13 +299,21 @@ export class PiRpcBridge {
     const active = this.active
     if (!active || active.terminalized) return
     active.terminalized = true
+    // If the run was cancelling when pi exited, OR an abort was requested
+    // even before the route's CAS landed, the terminal status is 'cancelled',
+    // not 'error'. Synthesize the correct run.completed shape so the SSE event
+    // matches meta.json on disk.
+    const currentStatus = await this.deps.runStore.getStatus(active.runId)
+    const isCancellation =
+      active.abortRequested || currentStatus === 'cancelling'
+    const finalStatus: 'cancelled' | 'error' = isCancellation ? 'cancelled' : 'error'
     const errEvt: NormalizedEvent = {
       event: 'pi.error',
       data: { runId: active.runId, code, message: errorMessage },
     }
     const completedEvt: NormalizedEvent = {
       event: 'run.completed',
-      data: { runId: active.runId, status: 'error', error: errorMessage },
+      data: { runId: active.runId, status: finalStatus, error: errorMessage },
     }
     try {
       // Persist+emit pi.error first (non-terminal informational event).
@@ -241,10 +325,12 @@ export class PiRpcBridge {
         active.sessionKey,
         completedEvt,
       )
-      await this.deps.runStore.casStatus(active.runId, ['running'], 'error', {
-        finishedAt: Date.now(),
-        error: errorMessage,
-      })
+      await this.deps.runStore.casStatus(
+        active.runId,
+        ['running', 'cancelling'],
+        finalStatus,
+        { finishedAt: Date.now(), error: errorMessage },
+      )
       this.deps.bus.emit(enriched)
     } catch (err) {
       console.error('[pi-rpc-bridge] terminalize persist failed:', err)
@@ -255,6 +341,9 @@ export class PiRpcBridge {
   private finishActive(): void {
     const active = this.active
     if (!active) return
+    // Cancel abort escalation timers if a clean exit beat them.
+    if (active.killTermTimer) clearTimeout(active.killTermTimer)
+    if (active.killForceTimer) clearTimeout(active.killForceTimer)
     this.active = null
     this.deps.tracker.finish(active.sessionKey, active.runId)
     active.resolveCompleted()
