@@ -8,6 +8,7 @@ import { PiRpcBridge, getPiRpcBridge } from './pi-rpc-bridge.js'
 import { KbEventBus, getKbEventBus } from './kb-event-bus.js'
 import { KbWatcher } from './kb-watcher.js'
 import { ConfluenceClient, ALLOWED_BASE_URL } from './confluence-client.js'
+import { AuthStore, getAuthStore } from './auth-store.js'
 import type { SessionInfo } from '../types/run.js'
 
 export interface Wiring {
@@ -24,6 +25,10 @@ export interface Wiring {
   confluence: ConfluenceClient | null
   confluenceConfigured: boolean
   confluenceConfigError?: string
+  /** Per-workspace auth store. null only when test wiring opts out. */
+  authStore: AuthStore | null
+  /** Absolute path to the workspace root (for probe + diagnostics). */
+  workspaceRoot: string
 }
 
 export interface WiringOptions {
@@ -88,11 +93,19 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     confluenceConfigError = 'CONFLUENCE_BASE_URL / ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN (or JIRA_TOKEN) not all set'
   }
 
+  // Auth store: lazy-loaded (token + sessions read from disk on first use).
+  const authStore = getAuthStore({ workspaceRoot: root })
+
   const w: Wiring = {
     bus, runStore, tracker, bridge, sessions, kbBus, skillsDir, watcher,
     confluence, confluenceConfigured, confluenceConfigError,
+    authStore, workspaceRoot: root,
   }
   globalThis.__wiring = w
+  // Fire-and-forget load — the middleware tolerates an in-flight load.
+  void authStore.load().catch((err) => {
+    console.error('[wiring] auth store load failed:', err)
+  })
   return w
 }
 
@@ -102,4 +115,5 @@ export function _resetWiringForTests(): void {
   globalThis.__sendRunTracker = undefined
   globalThis.__piRpcBridge = undefined
   globalThis.__kbEventBus = undefined
+  globalThis.__authStore = undefined
 }

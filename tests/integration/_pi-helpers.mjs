@@ -46,6 +46,7 @@ export async function bootWorkspace() {
     NO_COLOR: '1',
     PORT: String(port),
     PI_WORKSPACE_ROOT: root,
+    PI_WORKSPACE_AUTH_DISABLED: '1',
   }
   const child = spawn('node', ['--import', 'tsx', SERVER_PATH], {
     cwd: REPO_ROOT,

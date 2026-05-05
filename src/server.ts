@@ -38,6 +38,16 @@ import {
   SKILLS_CREATE_PATH,
   KB_SKILL_GET_PATTERN,
 } from './routes/skills.js'
+import {
+  handleAuthLogin,
+  handleAuthLogout,
+  handleAuthCheck,
+  AUTH_LOGIN_PATH,
+  AUTH_LOGOUT_PATH,
+  AUTH_CHECK_PATH,
+} from './routes/auth.js'
+import { handleProbe, PROBE_PATH } from './routes/probe.js'
+import { checkAuth } from './server/auth-middleware.js'
 
 export const VERSION = '0.1.0'
 export const DEFAULT_PORT = 8766
@@ -73,6 +83,12 @@ const ROUTES: Route[] = [
   // Stage 6 routes — skill creation + read.
   { method: 'POST', pattern: SKILLS_CREATE_PATH, handler: handleSkillsCreate },
   { method: 'GET', pattern: KB_SKILL_GET_PATTERN, handler: handleKbSkillGet },
+
+  // Stage 7 routes — auth + capability probe.
+  { method: 'POST', pattern: AUTH_LOGIN_PATH, handler: handleAuthLogin },
+  { method: 'POST', pattern: AUTH_LOGOUT_PATH, handler: handleAuthLogout },
+  { method: 'GET', pattern: AUTH_CHECK_PATH, handler: handleAuthCheck },
+  { method: 'GET', pattern: PROBE_PATH, handler: handleProbe },
 ]
 
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
@@ -112,6 +128,15 @@ function dispatch(req: IncomingMessage, res: ServerResponse, w: Wiring): void {
     jsonError(res, 400, 'INVALID_PAGE_ID', 'pageId must be numeric', {
       raw: rawUrl,
     })
+    return
+  }
+
+  // Stage 7: cookie-gated auth middleware. /api/health and the auth endpoints
+  // are public; everything else requires a valid session cookie. Tests bypass
+  // with PI_WORKSPACE_AUTH_DISABLED=1.
+  const authDecision = checkAuth(req, reqPath, w.authStore ?? null)
+  if (!authDecision.allowed) {
+    jsonError(res, 401, 'AUTH_REQUIRED', `auth required (${authDecision.reason ?? 'no_cookie'})`)
     return
   }
 
