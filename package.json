@@ -1,0 +1,22 @@
+{
+  "name": "pi-workspace-server",
+  "version": "0.1.0",
+  "description": "Web workspace wrapping the pi agent CLI for WK CloudOps SREs.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test:smoke": "node --test tests/*.smoke.mjs"
+  },
+  "author": "WK CloudOps Hackathon",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "tsx": "4.19.4",
+    "typescript": "5.6.3"
+  }
+}
