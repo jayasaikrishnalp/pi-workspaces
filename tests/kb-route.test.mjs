@@ -95,6 +95,38 @@ test('GET /api/kb/graph returns 200 with nodes/edges/diagnostics', async () => {
   }
 })
 
+test('GET /api/kb/graph: malformed skill is surfaced as a diagnostic without breaking the endpoint', async () => {
+  // Codex r1 item 3: prove the route preserves diagnostics + 200 status when
+  // one skill is malformed. Catches a different bug class than the unit test
+  // — e.g., a route that drops the diagnostics field, returns 500, or caches.
+  const ctx = await bootHttp({ withSkills: false })
+  try {
+    fs.mkdirSync(path.join(ctx.skillsDir, 'broken'), { recursive: true })
+    fs.writeFileSync(
+      path.join(ctx.skillsDir, 'broken', 'SKILL.md'),
+      `---\nname: broken\nuses: [missing-bracket\n---\n# broken inline array\n`,
+    )
+    fs.mkdirSync(path.join(ctx.skillsDir, 'fine'), { recursive: true })
+    fs.writeFileSync(
+      path.join(ctx.skillsDir, 'fine', 'SKILL.md'),
+      `---\nname: fine\n---\n# this one is fine\n`,
+    )
+
+    const r = await fetch(`http://127.0.0.1:${ctx.port}/api/kb/graph`)
+    assert.equal(r.status, 200, 'malformed skill must not break the endpoint')
+    const body = await r.json()
+    // Valid skill remains.
+    const ids = body.nodes.map((n) => n.id)
+    assert.deepStrictEqual(ids, ['fine'])
+    // Diagnostic surfaces the broken file.
+    const diag = body.diagnostics.find((d) => d.path.includes('broken/SKILL.md'))
+    assert.ok(diag, `expected diagnostic for broken skill, got ${JSON.stringify(body.diagnostics)}`)
+    assert.equal(diag.severity, 'error')
+  } finally {
+    await ctx.stop()
+  }
+})
+
 test('GET /api/kb/graph returns empty graph when skills dir is empty', async () => {
   const ctx = await bootHttp({ withSkills: false })
   try {
@@ -296,6 +328,70 @@ test('real watcher → SSE delivers a kb.changed add event within 200ms of an at
     await new Promise((resolve) => server.close(() => resolve()))
     await watcher.stop()
     _resetWiringForTests()
+  }
+})
+
+test('kb subscribers do NOT receive run.* events (reverse channel isolation)', async () => {
+  // Codex r1 item 4: proves the kb channel rejects events from the chat bus.
+  // Symmetric to "chat does not see kb.changed" — but symmetric properties
+  // are not type-system-enforced; a future code change could break one half
+  // without breaking the other. So we test both halves.
+  const ctx = await bootHttp({ withSkills: false })
+  try {
+    const ac = new AbortController()
+    let resolveReady
+    const ready = new Promise((r) => (resolveReady = r))
+    const events = []
+    const collectPromise = (async () => {
+      try {
+        const res = await fetch(`http://127.0.0.1:${ctx.port}/api/kb/events`, { signal: ac.signal })
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        let signaled = false
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          if (!signaled && buf.includes('\n\n')) {
+            signaled = true
+            resolveReady()
+          }
+          let idx
+          while ((idx = buf.indexOf('\n\n')) >= 0) {
+            const block = buf.slice(0, idx)
+            buf = buf.slice(idx + 2)
+            const lines = block.split('\n').filter((l) => l)
+            let nonComment = false
+            let ev
+            for (const line of lines) {
+              if (line.startsWith(':')) continue
+              nonComment = true
+              if (line.startsWith('event: ')) ev = line.slice(7)
+            }
+            if (nonComment) events.push({ event: ev })
+          }
+        }
+      } catch (err) {
+        if (err?.name !== 'AbortError') throw err
+      }
+      return events
+    })()
+    await ready
+
+    // Emit a synthetic chat event directly on the chat bus. The kb subscriber
+    // must not see it.
+    await ctx.runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'hi' })
+    const enriched = await ctx.runStore.appendNormalized('r1', 's1', { event: 'run.start', data: {} })
+    ctx.bus.emit(enriched)
+    await new Promise((r) => setTimeout(r, 100))
+    ac.abort()
+    const got = await collectPromise
+
+    const runEvents = got.filter((e) => typeof e.event === 'string' && e.event.startsWith('run.'))
+    assert.equal(runEvents.length, 0, `kb subscriber must not see run.* events, got ${JSON.stringify(runEvents)}`)
+  } finally {
+    await ctx.stop()
   }
 })
 

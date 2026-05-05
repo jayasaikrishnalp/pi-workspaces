@@ -164,6 +164,39 @@ test('buildGraph: duplicate uses entries collapse to one edge', async () => {
   assert.equal(edges.length, 1)
 })
 
+// ---- parser accepted-shape tests: every documented shape stays accepted as
+// the parser's strict mode evolves. These guard against future tightening
+// accidentally rejecting a shape skill authors are already writing.
+
+// Each entry: [label, frontmatter content, expected node id, expected partial fields]
+const PARSER_OK = [
+  ['quoted scalar', `---\nname: "alpha"\ndescription: 'first one'\n---\n`, 'alpha', { description: 'first one' }],
+  ['inline empty array', `---\nname: a\ntags: []\n---\n`, 'a', { tags: [] }],
+  ['inline array with items', `---\nname: a\ntags: [foo, bar]\n---\n`, 'a', { tags: ['foo', 'bar'] }],
+  ['block array (uses)', `---\nname: a\nuses:\n  - first\n  - second\n---\n`, 'a', {}],
+]
+
+for (const [label, content, expectedId, expected] of PARSER_OK) {
+  test(`parser accepts: ${label}`, async () => {
+    const dir = tmpSkillsDir()
+    // Use the directory name "a" so paths are stable; the skill's `name`
+    // (the node id) comes from frontmatter.
+    writeSkill(dir, 'a', content)
+    const g = await buildGraph(dir)
+    // Parsing succeeded → node exists. We don't assert diagnostics empty
+    // because some shapes legally produce them (e.g. dangling uses).
+    const node = g.nodes.find((n) => n.id === expectedId)
+    assert.ok(node, `expected node '${expectedId}' for shape ${label}; diagnostics: ${JSON.stringify(g.diagnostics)}`)
+    // No PARSE-error diagnostics for the source file.
+    const parseErrors = g.diagnostics.filter(
+      (d) => d.severity === 'error' && d.path === 'a/SKILL.md',
+    )
+    assert.deepStrictEqual(parseErrors, [], `unexpected parse errors for shape ${label}`)
+    if (expected.description !== undefined) assert.equal(node.description, expected.description)
+    if (expected.tags !== undefined) assert.deepStrictEqual(node.tags, expected.tags)
+  })
+}
+
 // ---- parser strictness tests (cover the new diagnostic paths added in
 // response to Codex round 1: malformed inline arrays, inline objects, etc.)
 

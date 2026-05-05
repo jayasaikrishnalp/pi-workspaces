@@ -6,6 +6,7 @@ import path from 'node:path'
 
 import { KbEventBus } from '../src/server/kb-event-bus.ts'
 import { KbWatcher } from '../src/server/kb-watcher.ts'
+import { buildGraph } from '../src/server/kb-browser.ts'
 
 function tmpSkillsDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'kb-watcher-'))
@@ -59,21 +60,39 @@ test('atomic tmp+rename produces exactly one add event', async () => {
   }
 })
 
-test('unlink emits unlink event', async () => {
+test('unlink emits unlink event AND subsequent buildGraph excludes the removed skill', async () => {
   const dir = tmpSkillsDir()
   // Pre-populate so the unlink target exists when the watcher starts.
   const skillDir = path.join(dir, 'will-go')
   fs.mkdirSync(skillDir, { recursive: true })
   const skillPath = path.join(skillDir, 'SKILL.md')
   fs.writeFileSync(skillPath, `---\nname: will-go\n---\n`)
+  // A second skill so the graph isn't empty after unlink.
+  const stayDir = path.join(dir, 'will-stay')
+  fs.mkdirSync(stayDir, { recursive: true })
+  fs.writeFileSync(path.join(stayDir, 'SKILL.md'), `---\nname: will-stay\n---\n`)
+
+  // Pre-unlink: graph contains both.
+  const before = await buildGraph(dir)
+  const beforeIds = before.nodes.map((n) => n.id).sort()
+  assert.deepStrictEqual(beforeIds, ['will-go', 'will-stay'])
 
   const bus = new KbEventBus()
   const watcher = new KbWatcher({ skillsDir: dir, bus, stabilityThreshold: 100, pollInterval: 25 })
   await watcher.start()
   try {
     fs.unlinkSync(skillPath)
+    // The empty skill directory will be cleaned up too so the diagnostic
+    // about "no SKILL.md" doesn't appear in the post-graph.
+    fs.rmdirSync(skillDir)
     const evt = await waitForEvent(bus, (e) => e.kind === 'unlink' && e.path === skillPath, 3_000)
     assert.equal(evt.skill, 'will-go')
+
+    // Post-unlink: buildGraph reflects the removal — the user-visible graph
+    // shrinks. This is what the live UI relies on after seeing the SSE event.
+    const after = await buildGraph(dir)
+    const afterIds = after.nodes.map((n) => n.id)
+    assert.deepStrictEqual(afterIds, ['will-stay'])
   } finally {
     await watcher.stop()
   }
