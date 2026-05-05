@@ -29,11 +29,11 @@ export async function handleRunEvents(
   w: Wiring,
 ): Promise<void> {
   const params = matchPath(RUNS_EVENTS_PATTERN, parsePath(req.url))
-  if (!params) {
+  if (!params || !params.runId) {
     jsonError(res, 404, 'NOT_FOUND', 'unknown runs events path')
     return
   }
-  const runId = params.runId
+  const runId: string = params.runId
 
   // Locked spec §2.4 allows EITHER `?afterSeq=N` query param OR a
   // `Last-Event-ID: <runId>:<seq>` header (used by EventSource auto-reconnect).

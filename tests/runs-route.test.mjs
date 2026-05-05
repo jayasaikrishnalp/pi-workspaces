@@ -186,18 +186,20 @@ test('replay-aware channel: Last-Event-ID with mismatched runId returns 400', as
   }
 })
 
-test('replay-aware channel: malformed afterSeq returns 400 without SSE handshake', async () => {
-  const ctx = await bootHttp()
-  try {
-    await ctx.runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'hi' })
-    const res = await fetch(`http://127.0.0.1:${ctx.port}/api/runs/r1/events?afterSeq=abc`)
-    assert.equal(res.status, 400)
-    const body = await res.json()
-    assert.equal(body.error.code, 'BAD_REQUEST')
-  } finally {
-    await ctx.stop()
-  }
-})
+for (const bad of ['abc', '-1', 'NaN', '1.5', '1e3']) {
+  test(`replay-aware channel: malformed afterSeq=${bad} returns 400 without SSE handshake`, async () => {
+    const ctx = await bootHttp()
+    try {
+      await ctx.runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'hi' })
+      const res = await fetch(`http://127.0.0.1:${ctx.port}/api/runs/r1/events?afterSeq=${encodeURIComponent(bad)}`)
+      assert.equal(res.status, 400, `afterSeq=${bad} should be 400 not ${res.status}`)
+      const body = await res.json()
+      assert.equal(body.error.code, 'BAD_REQUEST')
+    } finally {
+      await ctx.stop()
+    }
+  })
+}
 
 test('replay-aware channel: unknown runId returns 404', async () => {
   const ctx = await bootHttp()

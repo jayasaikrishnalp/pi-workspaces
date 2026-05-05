@@ -170,20 +170,37 @@ export class PiRpcBridge {
     const result = mapPiEvent(parsed, active.state, active.ctx)
     active.state = result.state
     for (const norm of result.events) {
-      await this.persistAndEmit(active, norm)
       if (norm.event === 'run.completed') {
         const status = (norm.data?.status as string) ?? 'success'
         const error = (norm.data?.error as string) ?? null
-        // Mark terminalized BEFORE awaiting CAS so that a racing child exit
+        // Mark terminalized BEFORE awaiting CAS so a racing child exit
         // does NOT synthesize a duplicate pi.error / run.completed.
         active.terminalized = true
-        await this.deps.runStore.casStatus(
-          active.runId,
-          ['running'],
-          status as 'success' | 'error' | 'cancelled',
-          { finishedAt: Date.now(), error },
-        )
-        this.finishActive()
+        // Order matters for SSE consistency: persist event → flip meta status
+        // → emit on bus. A subscriber receiving the bus event must observe a
+        // terminal status on disk if it polls. The finally block guarantees
+        // we always clear active state even if disk writes throw — otherwise
+        // tracker would leak and waitForActiveCompletion() would never resolve.
+        try {
+          const enriched = await this.deps.runStore.appendNormalized(
+            active.runId,
+            active.sessionKey,
+            norm,
+          )
+          await this.deps.runStore.casStatus(
+            active.runId,
+            ['running'],
+            status as 'success' | 'error' | 'cancelled',
+            { finishedAt: Date.now(), error },
+          )
+          this.deps.bus.emit(enriched)
+        } catch (err) {
+          console.error('[pi-rpc-bridge] run.completed persist failed:', err)
+        } finally {
+          this.finishActive()
+        }
+      } else {
+        await this.persistAndEmit(active, norm)
       }
     }
   }
@@ -215,15 +232,23 @@ export class PiRpcBridge {
       data: { runId: active.runId, status: 'error', error: errorMessage },
     }
     try {
+      // Persist+emit pi.error first (non-terminal informational event).
       await this.persistAndEmit(active, errEvt)
-      await this.persistAndEmit(active, completedEvt)
+      // For run.completed: persist → CAS meta → emit, so the bus event
+      // signals "disk is fully consistent" to subscribers.
+      const enriched = await this.deps.runStore.appendNormalized(
+        active.runId,
+        active.sessionKey,
+        completedEvt,
+      )
+      await this.deps.runStore.casStatus(active.runId, ['running'], 'error', {
+        finishedAt: Date.now(),
+        error: errorMessage,
+      })
+      this.deps.bus.emit(enriched)
     } catch (err) {
       console.error('[pi-rpc-bridge] terminalize persist failed:', err)
     }
-    await this.deps.runStore.casStatus(active.runId, ['running'], 'error', {
-      finishedAt: Date.now(),
-      error: errorMessage,
-    })
     this.finishActive()
   }
 
@@ -250,7 +275,7 @@ export class PiRpcBridge {
 
     if (this.terminated) return
     const idx = Math.min(this.restartAttempt, RESTART_BACKOFF_MS.length - 1)
-    const wait = RESTART_BACKOFF_MS[idx]
+    const wait = RESTART_BACKOFF_MS[idx] ?? 0
     this.restartAttempt += 1
     if (wait > 0) await new Promise((r) => setTimeout(r, wait))
   }

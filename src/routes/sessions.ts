@@ -31,11 +31,11 @@ export async function handleActiveRun(
   w: Wiring,
 ): Promise<void> {
   const params = matchPath(PATH_ACTIVE_RUN, parsePath(req.url))
-  if (!params) {
+  if (!params || !params.sessionKey) {
     jsonError(res, 404, 'NOT_FOUND', 'unknown active-run path')
     return
   }
-  const sessionKey = params.sessionKey
+  const sessionKey: string = params.sessionKey
   if (!w.sessions.has(sessionKey)) {
     jsonError(res, 404, 'UNKNOWN_SESSION', `session ${sessionKey} does not exist`)
     return

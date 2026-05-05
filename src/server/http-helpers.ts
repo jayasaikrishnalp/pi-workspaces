@@ -92,8 +92,8 @@ export function matchPath(
   if (pp.length !== sp.length) return null
   const params: Record<string, string> = {}
   for (let i = 0; i < pp.length; i++) {
-    const a = pp[i]
-    const b = sp[i]
+    const a = pp[i] as string
+    const b = sp[i] as string
     if (a.startsWith(':')) {
       params[a.slice(1)] = decodeURIComponent(b)
     } else if (a !== b) {
