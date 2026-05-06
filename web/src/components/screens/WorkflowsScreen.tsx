@@ -1,31 +1,18 @@
 import { useState } from 'react'
 import { useApi } from '../../hooks/useApi'
-import { listWorkflows, createWorkflow, type WorkflowSummary, type WorkflowStep } from '../../lib/api'
+import { listWorkflows, createWorkflow, type WorkflowStep } from '../../lib/api'
+import { WorkflowConductor } from './conductor/WorkflowConductor'
 
 export function WorkflowsScreen(): JSX.Element {
   const list = useApi('workflows.list', listWorkflows)
   const [creating, setCreating] = useState(false)
-  const workflows = list.data?.workflows ?? []
 
   return (
-    <div className="kb-screen" data-testid="workflows">
-      <div className="kb-header">
-        <h2>Workflows</h2>
-        <div className="kb-meta">{workflows.length} on disk · ordered runbooks · steps reference skills or other workflows</div>
+    <div data-testid="workflows" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 12px 0' }}>
         <button className="btn btn-primary" onClick={() => setCreating(true)} data-testid="workflows-new">+ new workflow</button>
       </div>
-      <div className="kb-list" data-testid="workflows-list" style={{ maxHeight: 'none' }}>
-        {workflows.length === 0 ? <div className="dash-empty">no workflows yet — POST /api/workflows or click "+ new workflow"</div>
-          : workflows.map((w: WorkflowSummary) => (
-              <div key={w.name} className="kb-list-row" data-testid={`workflow-row-${w.name}`}>
-                <div className="kb-list-name">{w.name}</div>
-                {w.description ? <div className="kb-list-desc">{w.description}</div> : null}
-                <div className="kb-list-desc" style={{ fontFamily: 'var(--font-mono)' }}>
-                  {w.steps.length} step{w.steps.length === 1 ? '' : 's'}: {w.steps.map((s) => `${s.kind}:${s.ref}`).join(' → ')}
-                </div>
-              </div>
-            ))}
-      </div>
+      <WorkflowConductor />
       {creating ? <WorkflowCreateModal onClose={() => setCreating(false)} onCreated={() => { list.reload(); setCreating(false) }} /> : null}
     </div>
   )
