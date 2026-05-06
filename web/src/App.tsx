@@ -16,6 +16,7 @@ import { TasksScreen } from './components/screens/TasksScreen'
 import { TerminalScreen } from './components/screens/TerminalScreen'
 import { McpScreen } from './components/screens/McpScreen'
 import { ConfluenceScreen } from './components/screens/ConfluenceScreen'
+import { SwarmScreen, ConductorScreen, OperationsScreen, FilesScreen } from './components/screens/PreviewScreens'
 import { Settings } from './components/overlays/Settings'
 import { CommandPalette } from './components/overlays/CommandPalette'
 import { Shortcuts } from './components/overlays/Shortcuts'
@@ -133,6 +134,10 @@ export function App(): JSX.Element {
             : active === 'terminal'  ? <TerminalScreen />
             : active === 'mcp'       ? <McpScreen />
             : active === 'confluence'? <ConfluenceScreen />
+            : active === 'swarm'     ? <SwarmScreen />
+            : active === 'conductor' ? <ConductorScreen />
+            : active === 'ops'       ? <OperationsScreen />
+            : active === 'files'     ? <FilesScreen />
             : <PlaceholderScreen id={active} preview={isPreview} />}
         </div>
       </div>

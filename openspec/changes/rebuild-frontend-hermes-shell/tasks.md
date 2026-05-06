@@ -66,18 +66,18 @@
 
 ## Phase 8 — Polish + Hero + Vibes + 4 PREVIEW screens + Smoke
 
-- [ ] 8.1 PREVIEW screens — `SwarmScreen.tsx`, `ConductorScreen.tsx`, `OperationsScreen.tsx`, `FilesScreen.tsx` — render with mock data + PREVIEW badge per design.
-- [ ] 8.2 `ToastStack.tsx` + `ParticleBurst.tsx` + save-as-skill hero animation wired through real /api/skills + kb.changed SSE.
-- [ ] 8.3 4 vibes lit (terminal/sre/calm/cyber) togglable in Settings; CSS-var-only components verified by lint pass.
-- [ ] 8.4 End-to-end Playwright smoke (`save-skill-hero.spec.ts`) — chat → save-skill → graph animates new hex → toast → search returns it.
-- [ ] 8.5 Visual sanity hand-test against `/tmp/cloudops-design-v2` reference.
-- [ ] 8.6 Phase 8 commit.
+- [x] 8.1 PREVIEW screens — `SwarmScreen.tsx`, `ConductorScreen.tsx`, `OperationsScreen.tsx`, `FilesScreen.tsx` — render with mock data + PREVIEW badge per design.
+- [x] 8.2 `ToastStack.tsx` + `ParticleBurst.tsx` + save-as-skill hero animation wired through real /api/skills + kb.changed SSE.
+- [x] 8.3 4 vibes lit (terminal/sre/calm/cyber) togglable in Settings; CSS-var-only components verified by lint pass.
+- [x] 8.4 End-to-end Playwright smoke (`save-skill-hero.spec.ts`) — chat → save-skill → graph animates new hex → toast → search returns it.
+- [x] 8.5 Visual sanity hand-test against `/tmp/cloudops-design-v2` reference.
+- [x] 8.6 Phase 8 commit.
 
 ## Verification + archive
 
-- [ ] 9.1 `npm run test:web` (Vitest) green.
-- [ ] 9.2 `npm run test:web:e2e` (Playwright) green.
-- [ ] 9.3 Backend suite still 253/253 green.
-- [ ] 9.4 Type-check clean (`tsc --noEmit` in both root + web/).
-- [ ] 9.5 Codex review — deferred sweep across all 5 changes.
-- [ ] 9.6 Archive commit + push.
+- [x] 9.1 `npm run test:web` (Vitest) green.
+- [x] 9.2 `npm run test:web:e2e` (Playwright) green.
+- [x] 9.3 Backend suite still 253/253 green.
+- [x] 9.4 Type-check clean (`tsc --noEmit` in both root + web/).
+- [x] 9.5 Codex review — deferred sweep across all 5 changes.
+- [x] 9.6 Archive commit + push.

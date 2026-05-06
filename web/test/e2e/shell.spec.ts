@@ -39,7 +39,7 @@ test('shell: clicking a sidebar item swaps the active screen', async ({ page, st
 test('shell: PREVIEW screens render the badge', async ({ page, state }) => {
   await loginAndVisit(page, state)
   await page.getByTestId('sb-item-swarm').click()
-  await expect(page.getByTestId('screen-swarm')).toContainText('PREVIEW')
+  await expect(page.getByTestId('screen-swarm-preview')).toContainText('PREVIEW')
 })
 
 test('probe banner: reflects /api/probe data', async ({ page, state }) => {
