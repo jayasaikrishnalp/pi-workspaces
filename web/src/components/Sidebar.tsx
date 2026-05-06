@@ -4,7 +4,7 @@ import { Icons, Logo } from './icons/Icons'
 export type ScreenId =
   | 'dashboard' | 'chat' | 'terminal' | 'jobs' | 'tasks'
   | 'workflows' | 'teams'
-  | 'graph' | 'memory' | 'skills' | 'confluence' | 'mcp' | 'souls'
+  | 'graph' | 'kb' | 'memory' | 'skills' | 'confluence' | 'mcp' | 'souls'
   | 'secrets'
   | 'sessions'
 
@@ -17,6 +17,7 @@ interface Props {
   taskCount?: number
   teamsCount?: number
   workflowsCount?: number
+  wikiCount?: number
   recentSessions?: Array<{ id: string; title: string; ago: string }>
   onCommandPalette?: () => void
   onSettings?: () => void
@@ -68,7 +69,7 @@ function SidebarGroup({ label, defaultOpen = true, children }: SidebarGroupProps
 }
 
 export function Sidebar(props: Props): JSX.Element {
-  const { active, onPick, collapsed, setCollapsed, skillCount, taskCount, teamsCount, workflowsCount, recentSessions = [], onCommandPalette } = props
+  const { active, onPick, collapsed, setCollapsed, skillCount, taskCount, teamsCount, workflowsCount, wikiCount, recentSessions = [], onCommandPalette } = props
 
   if (collapsed) {
     return (
@@ -150,10 +151,17 @@ export function Sidebar(props: Props): JSX.Element {
       <SidebarGroup label="KNOWLEDGE">
         <SidebarItem
           icon={<Icons.graph size={14} />}
-          label="Knowledge Graph"
+          label="DAG"
           active={active === 'graph'}
           onClick={() => onPick('graph')}
           badge={typeof skillCount === 'number' ? <span className="sb-num">{skillCount}</span> : null}
+        />
+        <SidebarItem
+          icon={<Icons.book size={14} />}
+          label="Knowledge Base"
+          active={active === 'kb'}
+          onClick={() => onPick('kb')}
+          badge={typeof wikiCount === 'number' && wikiCount > 0 ? <span className="sb-num">{wikiCount}</span> : null}
         />
         <SidebarItem icon={<Icons.memory size={14} />} label="Memory" active={active === 'memory'} onClick={() => onPick('memory')} />
         <SidebarItem icon={<Icons.book size={14} />} label="Skills" active={active === 'skills'} onClick={() => onPick('skills')} />

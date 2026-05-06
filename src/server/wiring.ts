@@ -17,7 +17,15 @@ import { McpBroker } from './mcp-broker.js'
 import { loadSeedConfig } from './mcp-config.js'
 import { openDb, upsertKbFts, deleteKbFts, type Db } from './db.js'
 import { installPersister } from './chat-persister.js'
+import { WikiStore } from './wiki-store.js'
+import { WikiIngester } from './wiki-ingester.js'
+import { WikiWatcher } from './wiki-watcher.js'
+import { WorkflowRunsStore } from './workflow-runs-store.js'
+import { WorkflowRunBusRegistry } from './workflow-run-bus.js'
+import { WorkflowRunner } from './workflow-runner.js'
 import type { SessionInfo } from '../types/run.js'
+
+const DEFAULT_WIKI_ROOT = '/Users/jayasaikrishnayerramsetty/pipeline-information/wiki'
 
 export type SpawnPi = (args: readonly string[], opts?: SpawnOptions) => ChildProcess
 
@@ -56,6 +64,14 @@ export interface Wiring {
   mcpBroker: McpBroker
   /** SQLite handle for jobs / tasks / FTS5 / chat_messages. Tests may omit it. */
   db?: Db
+  /** WK pipeline wiki — full-text search store. null when WIKI_ROOT missing. */
+  wikiStore: WikiStore | null
+  wikiRoot: string | null
+  wikiWatcher: WikiWatcher | null
+  /** Workflow run engine — null only when SQLite is absent. */
+  workflowRunsStore: WorkflowRunsStore | null
+  workflowRunBuses: WorkflowRunBusRegistry | null
+  workflowRunner: WorkflowRunner | null
 }
 
 export interface WiringOptions {
@@ -180,12 +196,52 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     }
   })
 
+  // Wiki store + ingester + watcher. Optional — disabled if root is missing.
+  const wikiRoot = process.env.WIKI_ROOT ?? DEFAULT_WIKI_ROOT
+  let wikiStore: WikiStore | null = null
+  let wikiWatcher: WikiWatcher | null = null
+  let resolvedWikiRoot: string | null = null
+  if (db && fsSync.existsSync(wikiRoot)) {
+    wikiStore = new WikiStore(db)
+    resolvedWikiRoot = wikiRoot
+    const ingester = new WikiIngester(wikiStore, wikiRoot)
+    void ingester.ingestAll().then(({ count, durationMs }) => {
+      console.log(`[wiki] indexed ${count} docs from ${wikiRoot} in ${durationMs}ms`)
+    }).catch((err) => {
+      console.error('[wiki] initial ingest failed:', err)
+    })
+    if (options.startWatcher !== false && process.env.PI_WORKSPACE_DISABLE_WATCHER !== '1') {
+      wikiWatcher = new WikiWatcher({ root: wikiRoot, ingester })
+      void wikiWatcher.start().catch((err) => {
+        console.error('[wiki] watcher failed to start:', err)
+      })
+    }
+  } else if (db) {
+    console.log(`[wiki] root not found (${wikiRoot}); search-wiki disabled`)
+  }
+
+  // Workflow run engine — depends on SQLite. Tests without `db` get nulls.
+  let workflowRunsStore: WorkflowRunsStore | null = null
+  let workflowRunBuses: WorkflowRunBusRegistry | null = null
+  let workflowRunner: WorkflowRunner | null = null
+  if (db) {
+    workflowRunsStore = new WorkflowRunsStore(db)
+    workflowRunBuses = new WorkflowRunBusRegistry()
+    workflowRunner = new WorkflowRunner({
+      store: workflowRunsStore,
+      bus: workflowRunBuses,
+      kbRoot,
+    })
+  }
+
   const w: Wiring = {
     bus, runStore, tracker, bridge, sessions, kbBus,
     kbRoot, skillsDir, agentsDir, workflowsDir, memoryDir,
     watcher,
     confluence, confluenceConfigured, confluenceConfigError,
     authStore, secretStore, workspaceRoot: root, spawnPi, spawnBash, mcpBroker, db,
+    wikiStore, wikiRoot: resolvedWikiRoot, wikiWatcher,
+    workflowRunsStore, workflowRunBuses, workflowRunner,
   }
   globalThis.__wiring = w
   void authStore.load().catch((err) => {

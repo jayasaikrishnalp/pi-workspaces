@@ -53,8 +53,33 @@ export interface ProbeResponse {
   db?: { ok: boolean; schemaVersion?: number }
   mcp?: { servers: Array<{ id: string; kind: string; status: string; toolCount: number; error?: string }> }
   auth: { piAuthJsonPresent: boolean }
+  wiki?: { configured: boolean; root: string | null; count: number; lastIngestAt: number | null }
   workspace: { kbRoot: string; skillsDir: string; runsDir: string }
 }
+
+export interface WikiDocSummary { path: string; title: string; updated_at: number }
+export interface WikiDocFull {
+  path: string
+  title: string
+  body: string
+  frontmatter: string | null
+  updated_at: number
+  ingested_at: number
+}
+export interface WikiSearchHit { path: string; title: string; snippet: string; score: number }
+
+export const wikiStats = () => api.get<{ configured: boolean; root: string | null; count: number; lastIngestAt: number | null }>('/api/wiki/stats')
+export const wikiDocs = (params: { prefix?: string; limit?: number; offset?: number } = {}) => {
+  const qs = new URLSearchParams()
+  if (params.prefix) qs.set('prefix', params.prefix)
+  if (params.limit != null) qs.set('limit', String(params.limit))
+  if (params.offset != null) qs.set('offset', String(params.offset))
+  const q = qs.toString()
+  return api.get<{ docs: WikiDocSummary[] }>(`/api/wiki/docs${q ? '?' + q : ''}`)
+}
+export const wikiDoc = (path: string) => api.get<WikiDocFull>(`/api/wiki/doc?path=${encodeURIComponent(path)}`)
+export const wikiSearch = (q: string, limit = 10) =>
+  api.post<{ results: WikiSearchHit[]; source: string; query: string }>('/api/wiki/search', { q, limit })
 
 export const probe = () => api.get<ProbeResponse>('/api/probe')
 
@@ -193,6 +218,44 @@ export const createWorkflow = (input: WorkflowInput) =>
   api.post<{ name: string; path: string }>('/api/workflows', input)
 export const updateWorkflow = (name: string, patch: Partial<WorkflowInput>) =>
   api.put<{ name: string; path: string }>(`/api/workflows/${encodeURIComponent(name)}`, patch)
+
+/* ===== Workflow runs (Conductor) ===== */
+export type WorkflowRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type WorkflowStepStatus = 'queued' | 'running' | 'completed' | 'failed' | 'skipped'
+
+export interface WorkflowRun {
+  id: string
+  workflow: string
+  status: WorkflowRunStatus
+  started_at: number
+  ended_at: number | null
+  triggered_by: string | null
+  step_count: number
+  step_done: number
+  error: string | null
+}
+export interface WorkflowStepRun {
+  run_id: string
+  step_index: number
+  step_kind: 'skill' | 'workflow'
+  step_ref: string
+  status: WorkflowStepStatus
+  started_at: number | null
+  ended_at: number | null
+  output: string | null
+  error: string | null
+}
+
+export const listWorkflowRuns = (name: string) =>
+  api.get<{ runs: WorkflowRun[] }>(`/api/workflows/${encodeURIComponent(name)}/runs`)
+export const getWorkflowRun = (name: string, runId: string) =>
+  api.get<{ run: WorkflowRun; steps: WorkflowStepRun[] }>(`/api/workflows/${encodeURIComponent(name)}/runs/${runId}`)
+export const startWorkflowRun = (name: string) =>
+  api.post<{ runId: string }>(`/api/workflows/${encodeURIComponent(name)}/run`, {})
+export const cancelWorkflowRun = (name: string, runId: string) =>
+  api.post<{ ok: boolean }>(`/api/workflows/${encodeURIComponent(name)}/run/${runId}/cancel`, {})
+export const workflowRunEventsUrl = (name: string, runId: string) =>
+  `/api/workflows/${encodeURIComponent(name)}/run/${runId}/events`
 
 /* ===== Dashboard intelligence ===== */
 

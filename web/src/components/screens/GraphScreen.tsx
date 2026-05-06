@@ -19,7 +19,7 @@ export function GraphScreen(): JSX.Element {
     <div className="graph-screen" data-testid="graph">
       <div className="graph-header">
         <div>
-          <h2>Knowledge Graph</h2>
+          <h2>DAG</h2>
           <div className="graph-subline">
             {data ? `${data.nodes.length} nodes · ${data.edges.length} edges` : loading ? 'loading…' : 'no data'}
           </div>

@@ -2,7 +2,42 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { jsonError, jsonOk, readJsonBody } from '../server/http-helpers.js'
 import { McpError } from '../server/mcp-broker.js'
+import { SEARCH_WIKI_TOOL, searchWiki } from '../server/tools/search-wiki.js'
 import type { Wiring } from '../server/wiring.js'
+
+/**
+ * Built-in tools — exposed alongside MCP tools in /api/mcp/tools and callable
+ * via /api/mcp/call with serverId='builtin'. Keep this list small.
+ */
+const BUILTIN_SERVER_ID = 'builtin'
+function builtinTools(w: Wiring): Array<Record<string, unknown>> {
+  const tools: Array<Record<string, unknown>> = []
+  if (w.wikiStore) {
+    tools.push({
+      serverId: BUILTIN_SERVER_ID,
+      toolName: SEARCH_WIKI_TOOL.name,
+      qualifiedName: `${BUILTIN_SERVER_ID}:${SEARCH_WIKI_TOOL.name}`,
+      description: SEARCH_WIKI_TOOL.description,
+      inputSchema: SEARCH_WIKI_TOOL.inputSchema,
+    })
+  }
+  return tools
+}
+
+function callBuiltin(
+  w: Wiring,
+  toolName: string,
+  args: Record<string, unknown>,
+): unknown {
+  if (toolName === SEARCH_WIKI_TOOL.name) {
+    if (!w.wikiStore) throw new McpError('UNKNOWN_TOOL', 'wiki not configured')
+    const query = typeof args.query === 'string' ? args.query : ''
+    const limit = typeof args.limit === 'number' ? args.limit : 5
+    if (!query) throw new McpError('INVALID_ARGS', 'query must be a non-empty string')
+    return searchWiki(w.wikiStore, query, limit)
+  }
+  throw new McpError('UNKNOWN_TOOL', `unknown built-in tool: ${toolName}`)
+}
 
 export const MCP_SERVERS_PATH = '/api/mcp/servers'
 export const MCP_TOOLS_PATH = '/api/mcp/tools'
@@ -36,6 +71,10 @@ export async function handleMcpToolsList(
   const filter = url.searchParams.get('server')
   try {
     if (filter) {
+      if (filter === BUILTIN_SERVER_ID) {
+        jsonOk(res, 200, { tools: builtinTools(w) })
+        return
+      }
       const tools = await w.mcpBroker.getToolsForServer(filter)
       jsonOk(res, 200, { tools })
       return
@@ -46,7 +85,7 @@ export async function handleMcpToolsList(
         w.mcpBroker.getToolsForServer(s.id).catch(() => undefined),
       ),
     )
-    jsonOk(res, 200, { tools: w.mcpBroker.getTools() })
+    jsonOk(res, 200, { tools: [...builtinTools(w), ...w.mcpBroker.getTools()] })
   } catch (err) {
     handleMcpError(res, err)
   }
@@ -79,6 +118,11 @@ export async function handleMcpCall(
   }
   const callArgs = (args && typeof args === 'object') ? (args as Record<string, unknown>) : {}
   try {
+    if (serverId === BUILTIN_SERVER_ID) {
+      const result = callBuiltin(w, toolName, callArgs)
+      jsonOk(res, 200, { result })
+      return
+    }
     const result = await w.mcpBroker.callTool(serverId, toolName, callArgs)
     jsonOk(res, 200, { result })
   } catch (err) {

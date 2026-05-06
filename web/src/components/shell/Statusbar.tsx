@@ -24,6 +24,7 @@ export function Statusbar({ probe, streaming, cost = ZERO }: Props): JSX.Element
       <span className="item">{probe?.souls?.count ?? 0} souls</span>
       <span className="item">{probe?.jobs?.count ?? 0} jobs</span>
       <span className="item">{probe?.tasks?.count ?? 0} tasks</span>
+      <span className="item">{probe?.wiki?.count ?? 0} wiki</span>
       <span className="cost-strip" data-testid="cost-strip">
         <span className="cost-label">SESSION</span>
         <span className="cost-sep">|</span>

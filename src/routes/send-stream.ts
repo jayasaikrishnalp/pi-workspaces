@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { Wiring } from '../server/wiring.js'
 import { jsonError, jsonOk, readJsonBody } from '../server/http-helpers.js'
 import { autoTitleIfMissing } from '../server/session-titles.js'
+import { buildWikiContext } from '../server/tools/search-wiki.js'
 
 export const SEND_STREAM_PATH = '/api/send-stream'
 
@@ -64,9 +65,24 @@ export async function handleSendStream(
     catch (err) { console.error('[send-stream] auto-title failed:', err) }
   }
 
+  // Pre-flight wiki context injection — search the WK pipeline knowledge
+  // base for the user's query and prepend the top hits as a system block
+  // so the agent has runbook context for free, no tool round-trip required.
+  // No-op when the wiki isn't configured or no hits clear the relevance floor.
+  let promptWithContext = message
+  if (w.wikiStore) {
+    try {
+      const hits = w.wikiStore.search(message, 3)
+      const ctx = buildWikiContext(hits)
+      if (ctx) promptWithContext = `${ctx}\n---\n\n${message}`
+    } catch (err) {
+      console.warn('[send-stream] wiki context injection failed:', (err as Error).message)
+    }
+  }
+
   try {
-    await w.runStore.startRun({ runId, sessionKey, prompt: message })
-    await w.bridge.send({ sessionKey, runId, prompt: message })
+    await w.runStore.startRun({ runId, sessionKey, prompt: promptWithContext })
+    await w.bridge.send({ sessionKey, runId, prompt: promptWithContext })
   } catch (err) {
     const e = err as Error & { code?: string; activeRunId?: string }
     // Roll back tracker; the run never made it to pi.

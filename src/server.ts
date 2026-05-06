@@ -115,6 +115,16 @@ import {
   AUTH_CHECK_PATH,
 } from './routes/auth.js'
 import { handleProbe, PROBE_PATH } from './routes/probe.js'
+import {
+  handleWikiStats, handleWikiDocs, handleWikiDoc, handleWikiSearch, handleSearchWikiTool,
+  WIKI_STATS_PATH, WIKI_DOCS_PATH, WIKI_DOC_PATH, WIKI_SEARCH_PATH, TOOLS_SEARCH_WIKI_PATH,
+} from './routes/wiki.js'
+import {
+  handleWorkflowRunStart, handleWorkflowRunCancel, handleWorkflowRunsList,
+  handleWorkflowRunDetail, handleWorkflowRunEvents,
+  WORKFLOW_RUN_START_PATTERN, WORKFLOW_RUN_CANCEL_PATTERN,
+  WORKFLOW_RUNS_LIST_PATTERN, WORKFLOW_RUN_DETAIL_PATTERN, WORKFLOW_RUN_EVENTS_PATTERN,
+} from './routes/workflow-runs.js'
 import { checkAuth } from './server/auth-middleware.js'
 
 export const VERSION = '0.1.0'
@@ -216,6 +226,20 @@ const ROUTES: Route[] = [
   { method: 'POST', pattern: AUTH_LOGOUT_PATH, handler: handleAuthLogout },
   { method: 'GET', pattern: AUTH_CHECK_PATH, handler: handleAuthCheck },
   { method: 'GET', pattern: PROBE_PATH, handler: handleProbe },
+
+  // WK pipeline wiki — knowledge base + search-wiki tool.
+  { method: 'GET', pattern: WIKI_STATS_PATH, handler: handleWikiStats },
+  { method: 'GET', pattern: WIKI_DOCS_PATH, handler: handleWikiDocs },
+  { method: 'GET', pattern: WIKI_DOC_PATH, handler: handleWikiDoc },
+  { method: 'POST', pattern: WIKI_SEARCH_PATH, handler: handleWikiSearch },
+  { method: 'POST', pattern: TOOLS_SEARCH_WIKI_PATH, handler: handleSearchWikiTool },
+
+  // Workflow runs — Conductor canvas execution.
+  { method: 'POST', pattern: WORKFLOW_RUN_START_PATTERN,  handler: handleWorkflowRunStart },
+  { method: 'POST', pattern: WORKFLOW_RUN_CANCEL_PATTERN, handler: handleWorkflowRunCancel },
+  { method: 'GET',  pattern: WORKFLOW_RUNS_LIST_PATTERN,  handler: handleWorkflowRunsList },
+  { method: 'GET',  pattern: WORKFLOW_RUN_DETAIL_PATTERN, handler: handleWorkflowRunDetail },
+  { method: 'GET',  pattern: WORKFLOW_RUN_EVENTS_PATTERN, handler: handleWorkflowRunEvents },
 ]
 
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {

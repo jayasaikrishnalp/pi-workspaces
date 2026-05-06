@@ -163,6 +163,14 @@ export async function handleProbe(
     db: dbInfo,
     mcp: { servers: w.mcpBroker?.getStatus?.() ?? [] },
     auth: { piAuthJsonPresent },
+    wiki: w.wikiStore
+      ? {
+          configured: true,
+          root: w.wikiRoot,
+          count: w.wikiStore.count(),
+          lastIngestAt: w.wikiStore.lastIngestAt(),
+        }
+      : { configured: false, count: 0, root: null, lastIngestAt: null },
     workspace: {
       kbRoot: w.kbRoot,
       skillsDir: w.skillsDir,

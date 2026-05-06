@@ -8,6 +8,7 @@ import { PlaceholderScreen } from './components/screens/PlaceholderScreen'
 import { DashboardScreen } from './components/screens/DashboardScreen'
 import { ChatScreen } from './components/screens/ChatScreen'
 import { GraphScreen } from './components/screens/GraphScreen'
+import { KnowledgeBaseScreen } from './components/screens/KnowledgeBaseScreen'
 import { SkillsScreen } from './components/screens/SkillsScreen'
 import { SoulsScreen } from './components/screens/SoulsScreen'
 import { MemoryScreen } from './components/screens/MemoryScreen'
@@ -111,6 +112,7 @@ export function App(): JSX.Element {
   const skillsCount = probeState.data?.skills.count
   const tasksCount = probeState.data?.tasks?.count
   const workflowsCount = probeState.data?.workflows?.count
+  const wikiCount = probeState.data?.wiki?.count
 
   const recentSessions = (sessionsState.data?.sessions ?? [])
     .slice()
@@ -133,6 +135,7 @@ export function App(): JSX.Element {
         skillCount={skillsCount}
         taskCount={tasksCount}
         workflowsCount={workflowsCount}
+        wikiCount={wikiCount}
         recentSessions={recentSessions}
         onCommandPalette={() => setCmdkOpen(true)}
         onSettings={() => setSettingsOpen(true)}
@@ -150,6 +153,7 @@ export function App(): JSX.Element {
           {active === 'dashboard' ? <DashboardScreen onPick={setActive} />
             : active === 'chat'      ? <ChatScreen onSaveSkill={(body) => { setSaveSkillBody(body); setSaveSkillOpen(true) }} />
             : active === 'graph'     ? <GraphScreen />
+            : active === 'kb'        ? <KnowledgeBaseScreen />
             : active === 'skills'    ? <SkillsScreen />
             : active === 'souls'     ? <SoulsScreen />
             : active === 'memory'    ? <MemoryScreen />
@@ -189,7 +193,7 @@ function titleFor(id: ScreenId): string {
   const m: Record<ScreenId, string> = {
     dashboard: 'dashboard', chat: 'chat', terminal: 'terminal',
     jobs: 'jobs', tasks: 'tasks', workflows: 'workflows', teams: 'teams',
-    graph: 'knowledge.graph', memory: 'memory', skills: 'skills', confluence: 'confluence',
+    graph: 'dag', kb: 'knowledge.base', memory: 'memory', skills: 'skills', confluence: 'confluence',
     mcp: 'mcp', secrets: 'secrets', souls: 'souls', sessions: 'sessions',
   }
   return m[id]
