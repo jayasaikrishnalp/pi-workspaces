@@ -24,10 +24,13 @@ export type Role = 'user' | 'assistant' | 'system'
 export interface ToolCall {
   id: string
   name: string
+  /** Final args (object) once tool.call.end lands, or the accumulated argsDelta string mid-stream. */
   args?: unknown
   result?: unknown
   status: 'pending' | 'running' | 'completed' | 'errored'
   durationMs?: number
+  /** Error message when tool.exec.end arrives with ok:false. */
+  error?: string
 }
 
 export interface ChatMessage {
@@ -105,26 +108,61 @@ export function reduce(state: ChatState, e: ChatEvent): ChatState {
     }
 
     case 'tool.call.delta': {
+      // Real backend (pi-event-mapper) emits `argsDelta` — a partial JSON
+      // string token. Accumulate it into a buffer for typing-style preview.
+      // Legacy synthetic shape used `args` (full value) — preserve that path.
       const id = String(e.data.toolCallId)
+      const argsDelta = e.data.argsDelta
+      const fullArgs = e.data.args
       return updateLatestAssistant(state, (m) => ({
         ...m,
-        toolCalls: m.toolCalls.map((c) =>
-          c.id === id ? { ...c, args: e.data.args ?? c.args } : c,
-        ),
+        toolCalls: m.toolCalls.map((c) => {
+          if (c.id !== id) return c
+          if (fullArgs !== undefined) return { ...c, args: fullArgs }
+          if (typeof argsDelta === 'string' && argsDelta.length > 0) {
+            const prior = typeof c.args === 'string' ? c.args : ''
+            return { ...c, args: prior + argsDelta }
+          }
+          return c
+        }),
       }))
     }
 
     case 'tool.call.end': {
+      // Real backend emits the FINAL args object here (not in tool.call.start).
+      // Always promote to 'running' (the call is now about to execute).
       const id = String(e.data.toolCallId)
+      const finalArgs = e.data.args
       return updateLatestAssistant(state, (m) => ({
         ...m,
-        toolCalls: m.toolCalls.map((c) => (c.id === id ? { ...c, status: 'running' } : c)),
+        toolCalls: m.toolCalls.map((c) =>
+          c.id === id
+            ? { ...c, status: 'running', ...(finalArgs !== undefined ? { args: finalArgs } : {}) }
+            : c,
+        ),
+      }))
+    }
+
+    case 'tool.exec.end': {
+      // Real backend signals success/failure at the end of execution.
+      const id = String(e.data.toolCallId)
+      const ok = e.data.ok !== false
+      const errMsg = !ok ? String(e.data.error ?? 'tool failed') : undefined
+      return updateLatestAssistant(state, (m) => ({
+        ...m,
+        toolCalls: m.toolCalls.map((c) =>
+          c.id === id
+            ? { ...c, status: ok ? c.status : 'errored', ...(errMsg ? { error: errMsg } : {}) }
+            : c,
+        ),
       }))
     }
 
     case 'tool.result': {
+      // Real backend sends `content` (string from contentToText). Legacy
+      // synthetic tests used `result`. Accept either.
       const id = String(e.data.toolCallId)
-      const result = e.data.result
+      const result = e.data.content !== undefined ? e.data.content : e.data.result
       const durationMs = typeof e.data.durationMs === 'number' ? e.data.durationMs : undefined
       return updateLatestAssistant(state, (m) => ({
         ...m,
