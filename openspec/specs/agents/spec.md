@@ -10,14 +10,17 @@ Operator-defined agents that compose multiple skills under a shared persona. Sto
 
 ### Requirement: Create An Agent
 
-The system SHALL expose `POST /api/agents` accepting JSON `{name: string, description?: string, skills: string[], persona?: string}`. The handler MUST:
+The system SHALL expose `POST /api/agents` accepting JSON `{name: string, description?: string, skills: string[], persona?: string, soul?: string}`. The handler MUST:
 
 - Reject `name` not matching `/^[a-z][a-z0-9-]{0,63}$/` with `400 INVALID_AGENT_NAME`.
 - Reject when `skills` is missing, empty, or contains a non-string with `400 INVALID_AGENT_SKILLS`.
 - Reject when any `skills[]` entry does not match an existing skill on disk with `400 INVALID_AGENT_SKILLS` and a diagnostic listing the offending refs.
+- Reject when `soul` is provided but does not match an existing soul under `<kbRoot>/souls/` with `400 UNKNOWN_SOUL`.
 - Reject when `<kbRoot>/agents/<name>/AGENT.md` already exists with `409 AGENT_EXISTS`.
-- Write the AGENT.md atomically (mkdir-as-reservation, tmp+rename). The frontmatter MUST contain `name` (matching the request), `skills` (string[]), and optionally `description`, `persona`.
+- Write the AGENT.md atomically (mkdir-as-reservation, tmp+rename). The frontmatter MUST contain `name` (matching the request), `skills` (string[]), and optionally `description`, `persona`, `soul`.
 - Return `201 {name, path}` where `path` is relative to `kbRoot`.
+
+The `soul` field references the agent's character/identity definition (see openspec/specs/souls). It is optional and reusable: multiple agents may reference the same soul. Dangling references on agents already on disk surface as `severity:"warn"` diagnostics in `/api/kb/graph` rather than hard failures.
 
 #### Scenario: Valid POST creates an agent
 
