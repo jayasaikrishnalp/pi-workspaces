@@ -32,6 +32,7 @@ interface SessionResp { sessionKey: string }
 export function useChatStream() {
   const [state, dispatch] = useReducer(chatReducer, INITIAL_CHAT_STATE)
   const [sessionKey, setSessionKey] = useState<string | null>(null)
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null)
   const esRef = useRef<EventSource | null>(null)
 
   // Create or reuse a session.
@@ -60,6 +61,15 @@ export function useChatStream() {
       try {
         const parsed = JSON.parse(m.data) as ServerEvent
         dispatch({ kind: 'event', event: parsed })
+        // Clear currentRunId on terminal lifecycle events so the stop button
+        // disappears and abort() becomes a no-op until the next send.
+        if (
+          parsed.event === 'pi.run.completed' ||
+          parsed.event === 'pi.run.cancelled' ||
+          parsed.event === 'pi.run.failed'
+        ) {
+          setCurrentRunId(null)
+        }
       } catch (err) {
         console.error('[useChatStream] bad event payload:', err)
       }
@@ -85,10 +95,28 @@ export function useChatStream() {
     if (!r.ok) {
       const body = await r.json().catch(() => ({})) as { error?: { message?: string } }
       dispatch({ kind: 'event', event: { event: 'pi.error', data: { message: body.error?.message ?? `send failed (${r.status})` } } })
+      return
+    }
+    // Capture the runId so we can abort it.
+    const body = await r.json().catch(() => ({})) as { runId?: string }
+    if (typeof body.runId === 'string' && body.runId.length > 0) {
+      setCurrentRunId(body.runId)
     }
   }, [sessionKey])
 
+  const abort = useCallback(async () => {
+    if (!currentRunId) return
+    try {
+      await fetch(`/api/runs/${encodeURIComponent(currentRunId)}/abort`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      })
+    } catch (err) {
+      console.error('[useChatStream] abort failed:', err)
+    }
+  }, [currentRunId])
+
   const reset = useCallback(() => dispatch({ kind: 'reset' }), [])
 
-  return { ...state, sessionKey, send, reset }
+  return { ...state, sessionKey, currentRunId, send, abort, reset }
 }

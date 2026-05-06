@@ -137,6 +137,7 @@ export function ChatScreen({ onSaveSkill }: Props = {}): JSX.Element {
         disabled={!chat.sessionKey}
         seed={seed}
         seedNonce={seedNonce}
+        onAbort={chat.abort}
       />
     </div>
   )

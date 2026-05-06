@@ -78,6 +78,33 @@ describe('Composer', () => {
     expect(onSend).not.toHaveBeenCalled()
   })
 
+  it('shows a stop button when streaming, hides the send arrow', () => {
+    const { rerender } = render(<Composer onSend={vi.fn()} />)
+    expect(screen.queryByTestId('composer-stop')).toBeNull()
+    rerender(<Composer onSend={vi.fn()} streaming onAbort={vi.fn()} />)
+    expect(screen.getByTestId('composer-stop')).toBeVisible()
+    // The send button is replaced (not coexisting) when streaming.
+    expect(screen.queryByTestId('composer-send')).toBeNull()
+  })
+
+  it('clicking the stop button calls onAbort, never onSend', () => {
+    const onSend = vi.fn()
+    const onAbort = vi.fn()
+    render(<Composer onSend={onSend} streaming onAbort={onAbort} />)
+    fireEvent.click(screen.getByTestId('composer-stop'))
+    expect(onAbort).toHaveBeenCalledTimes(1)
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('Enter is suppressed while streaming (no double-send while a run is in flight)', () => {
+    const onSend = vi.fn()
+    render(<Composer onSend={onSend} streaming onAbort={vi.fn()} />)
+    const textarea = screen.getByTestId('composer-text') as HTMLTextAreaElement
+    fireEvent.change(textarea, { target: { value: 'should not send' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
   it('bumping seedNonce applies the seed text', () => {
     // Mirror ChatScreen's flow: seed starts undefined, becomes a string when
     // a chip is clicked, with seedNonce incremented to force re-application.

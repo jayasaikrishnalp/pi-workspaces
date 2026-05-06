@@ -10,6 +10,8 @@ interface Props {
   seedNonce?: number
   /** Click handler for the model-switch hotkey (⌘. / Ctrl+.). */
   onSwitchModel?: () => void
+  /** Click handler for the stop button (only rendered while `streaming` is true). */
+  onAbort?: () => void
 }
 
 export function Composer({
@@ -19,6 +21,7 @@ export function Composer({
   seed,
   seedNonce,
   onSwitchModel,
+  onAbort,
 }: Props): JSX.Element {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
@@ -38,7 +41,8 @@ export function Composer({
   }, [seedNonce])
 
   const submit = async () => {
-    if (!value.trim() || busy || disabled) return
+    // Block all submits while a run is in flight; the user must hit stop first.
+    if (!value.trim() || busy || disabled || streaming) return
     setBusy(true)
     const v = value
     setValue('')
@@ -55,8 +59,10 @@ export function Composer({
       return
     }
     // Enter → send. Shift+Enter → newline (default). ⌘+Enter still sends.
+    // Suppress Enter while streaming so it can't double-fire mid-run.
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+      if (streaming) return
       void submit()
     }
   }
@@ -111,22 +117,33 @@ export function Composer({
               </svg>
             </button>
           </div>
-          <button
-            className="composer-send-btn"
-            type="submit"
-            disabled={!value.trim() || busy || disabled}
-            aria-label={streaming ? 'sending' : 'send'}
-            data-testid="composer-send"
-          >
-            {streaming ? (
-              <span className="composer-send-dots">···</span>
-            ) : (
+          {streaming ? (
+            <button
+              className="composer-stop-btn"
+              type="button"
+              onClick={() => onAbort?.()}
+              aria-label="stop"
+              title="Stop generating (abort run)"
+              data-testid="composer-stop"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2"/>
+              </svg>
+            </button>
+          ) : (
+            <button
+              className="composer-send-btn"
+              type="submit"
+              disabled={!value.trim() || busy || disabled}
+              aria-label="send"
+              data-testid="composer-send"
+            >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="19" x2="12" y2="5"/>
                 <polyline points="5 12 12 5 19 12"/>
               </svg>
-            )}
-          </button>
+            </button>
+          )}
         </div>
       </div>
     </form>
