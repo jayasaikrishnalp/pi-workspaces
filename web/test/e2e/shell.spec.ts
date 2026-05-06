@@ -1,0 +1,51 @@
+/**
+ * Phase 1 — workspace shell loads, login works, sidebar collapses, probe
+ * banner reflects /api/probe.
+ */
+
+import { test, expect, loginAndVisit } from './_fixtures'
+
+test('login flow: bad token → error visible, good token → workspace renders', async ({ page, state }) => {
+  await page.goto('/')
+  // Login form should render because there's no cookie yet.
+  await expect(page.getByTestId('login-form')).toBeVisible()
+
+  // Try a bad token first.
+  await page.getByTestId('login-token').fill('definitely-wrong')
+  await page.getByTestId('login-submit').click()
+  await expect(page.getByTestId('login-error')).toBeVisible()
+
+  // Then the real one.
+  await page.getByTestId('login-token').fill(state.devToken)
+  await page.getByTestId('login-submit').click()
+  await expect(page.getByTestId('workspace-shell')).toBeVisible()
+})
+
+test('shell: sidebar starts expanded and collapses on click', async ({ page, state }) => {
+  await loginAndVisit(page, state)
+  await expect(page.getByTestId('sidebar-expanded')).toBeVisible()
+  await page.getByTestId('sb-collapse').click()
+  await expect(page.getByTestId('sidebar-collapsed')).toBeVisible()
+})
+
+test('shell: clicking a sidebar item swaps the active screen', async ({ page, state }) => {
+  await loginAndVisit(page, state)
+  await page.getByTestId('sb-item-souls').click()
+  await expect(page.getByTestId('screen-souls')).toBeVisible()
+  await expect(page.locator('[data-testid=workspace-shell]')).toHaveAttribute('data-active', 'souls')
+})
+
+test('shell: PREVIEW screens render the badge', async ({ page, state }) => {
+  await loginAndVisit(page, state)
+  await page.getByTestId('sb-item-swarm').click()
+  await expect(page.getByTestId('screen-swarm')).toContainText('PREVIEW')
+})
+
+test('probe banner: reflects /api/probe data', async ({ page, state }) => {
+  await loginAndVisit(page, state)
+  const banner = page.getByTestId('probe-banner')
+  await expect(banner).toBeVisible()
+  // pi pill exists (ok or err depending on whether real `pi` is on PATH).
+  await expect(page.getByTestId('probe-pill-pi')).toBeVisible()
+  await expect(page.getByTestId('probe-pill-skills')).toContainText('loaded')
+})

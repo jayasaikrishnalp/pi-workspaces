@@ -10,7 +10,9 @@
     "test:integration": "PI_WORKSPACE_AUTH_DISABLED=1 node --import tsx --test --test-concurrency=1 tests/integration/*.smoke.mjs",
     "test": "PI_WORKSPACE_AUTH_DISABLED=1 node --import tsx --test --test-concurrency=1 tests/*.test.mjs tests/*.smoke.mjs",
     "test:all": "PI_WORKSPACE_AUTH_DISABLED=1 node --import tsx --test --test-concurrency=1 tests/*.test.mjs tests/*.smoke.mjs tests/integration/*.smoke.mjs",
-    "smoke:mcp": "node --import tsx --test tests/integration/mcp-live.manual.mjs"
+    "smoke:mcp": "node --import tsx --test tests/integration/mcp-live.manual.mjs",
+    "test:web": "cd web && npm test",
+    "test:web:e2e": "cd web && npm run build && npm run test:e2e"
   },
   "author": "WK CloudOps Hackathon",
   "license": "UNLICENSED",

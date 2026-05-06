@@ -1,0 +1,87 @@
+/* ==========================================================================
+   KodeKloud LaunchPad — Colors & Typography
+   Extracted directly from frontend/src/app/globals.css
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ——— Surfaces ——— */
+  --bg-primary:      #1e1e22;   /* Obsidian app shell */
+  --bg-secondary:    #26262c;   /* Raised surface */
+  --bg-card:         #2a2a32;   /* Card body */
+  --bg-card-hover:   #32323a;
+  --bg-glass:        rgba(30, 30, 34, 0.78);
+
+  /* ——— Borders ——— */
+  --border:          #3d3d3d;
+  --border-active:   #1dacfe;
+  --border-accent:   rgba(29, 172, 254, 0.24);
+
+  /* ——— Text ——— */
+  --text-primary:    #ffffff;
+  --text-secondary:  #b3b3b3;
+
+  /* ——— Brand / Accent (KodeKloud blue) ——— */
+  --accent:          #1dacfe;
+  --accent-hover:    #40bcff;
+  --accent-cyan:     #27ddf3;
+  --accent-deep:     #048bd0;
+  --accent-deeper:   #0c7dbb;
+
+  /* Logo gradient (mint → cyan → blue) */
+  --logo-stop-1:     #A5FECB;
+  --logo-stop-2:     #12D8FA;
+  --logo-stop-3:     #1FA2FF;
+
+  /* ——— Semantic ——— */
+  --green:           #22c55e;   /* Running / Success */
+  --yellow:          #eab308;   /* Configuring / Warning */
+  --red:             #ef4444;   /* Failed / Destructive */
+  --orange:          #f97316;   /* Stopped */
+
+  /* ——— Effects ——— */
+  --gradient-accent: linear-gradient(135deg, #1dacfe, #27ddf3, #1dacfe);
+  --shadow-glow:     0 0 24px rgba(29, 172, 254, 0.22);
+  --shadow-panel:    0 14px 30px -24px rgba(29, 172, 254, 0.62);
+  --shadow-surface:  0 14px 34px -24px rgba(29, 172, 254, 0.70);
+  --shadow-card:     0 20px 38px -30px rgba(0, 0, 0, 0.80);
+
+  /* ——— Radii ——— */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 12px;    /* default button / input radius (0.75rem) */
+  --r-xl: 16px;    /* cards */
+  --r-2xl: 20px;   /* hero cards */
+  --r-pill: 999px;
+
+  /* ——— Type scale ——— */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* Heading / text tokens observed in product */
+  --fs-hero:   30px;  /* text-3xl — hero h2 */
+  --fs-h1:     24px;  /* text-2xl — hero h2 small */
+  --fs-h2:     20px;  /* text-xl  — section title */
+  --fs-h3:     18px;  /* text-lg  — modal title */
+  --fs-body:   14px;  /* text-sm  — default body */
+  --fs-small:  12px;  /* text-xs  — meta */
+  --fs-micro:  10px;  /* uppercase labels, badges */
+
+  --lh-tight:  1.2;
+  --lh-normal: 1.5;
+
+  --tracking-wider: 0.05em;
+}
+
+/* ——— Semantic text styles ——— */
+.kk-h1     { font: 700 var(--fs-hero)/var(--lh-tight) var(--font-sans); color: var(--text-primary); }
+.kk-h2     { font: 700 var(--fs-h2)/var(--lh-tight) var(--font-sans); color: var(--text-primary); }
+.kk-h3     { font: 700 var(--fs-h3)/var(--lh-tight) var(--font-sans); color: var(--text-primary); }
+.kk-body   { font: 400 var(--fs-body)/var(--lh-normal) var(--font-sans); color: var(--text-primary); }
+.kk-meta   { font: 400 var(--fs-small)/var(--lh-normal) var(--font-sans); color: var(--text-secondary); }
+.kk-label  { font: 600 var(--fs-micro)/1 var(--font-sans); text-transform: uppercase; letter-spacing: var(--tracking-wider); color: var(--text-secondary); }
+.kk-mono   { font: 500 var(--fs-body)/var(--lh-normal) var(--font-mono); color: var(--text-primary); }
+.kk-code   { font: 400 var(--fs-small)/var(--lh-normal) var(--font-mono); color: var(--text-secondary); }
+
+body { font-family: var(--font-sans); background: var(--bg-primary); color: var(--text-primary); }
