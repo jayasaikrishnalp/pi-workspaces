@@ -49,6 +49,13 @@ export class PiRpcBridge {
    *  differs, we tell pi to start a fresh conversation via new_session RPC.
    *  Reset to null whenever the pi child dies (a fresh child = fresh state). */
   private lastSessionKey: string | null = null
+  /** When awaiting a new_session ack, the resolver and id are parked here.
+   *  handleLine resolves it on the matching response. Must finish BEFORE the
+   *  prompt hits stdin — pi processes lines async (void handleInputLine in
+   *  rpc-mode.ts), so a back-to-back write would race the prompt against
+   *  the still-running newSession() and lose it. */
+  private pendingNewSession: { id: string; resolve: () => void; reject: (err: Error) => void } | null = null
+  private static readonly NEW_SESSION_ACK_TIMEOUT_MS = 10_000
 
   constructor(deps: BridgeDeps) {
     this.deps = deps
@@ -84,12 +91,12 @@ export class PiRpcBridge {
     // across prompts in a single child; without this, "+ New Session" in
     // Hive would never reset pi's context. The new_session RPC is documented
     // in pi-mono/packages/coding-agent/src/modes/rpc/rpc-types.ts.
+    //
+    // Pi processes stdin lines without awaiting (void handleInputLine in
+    // rpc-mode.ts) — back-to-back writes race. So we must wait for the
+    // new_session ack before the prompt hits stdin.
     if (this.lastSessionKey !== null && this.lastSessionKey !== args.sessionKey) {
-      const resetCmd = JSON.stringify({
-        id: `new-session-${args.runId}`,
-        type: 'new_session',
-      })
-      this.child!.stdin!.write(resetCmd + '\n')
+      await this.requestNewSession(args.runId)
     }
     this.lastSessionKey = args.sessionKey
 
@@ -99,6 +106,25 @@ export class PiRpcBridge {
       message: args.prompt,
     })
     this.child!.stdin!.write(command + '\n')
+  }
+
+  private requestNewSession(runId: string): Promise<void> {
+    const id = `new-session-${runId}`
+    const cmd = JSON.stringify({ id, type: 'new_session' })
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (this.pendingNewSession?.id === id) {
+          this.pendingNewSession = null
+          reject(new Error(`pi did not ack new_session within ${PiRpcBridge.NEW_SESSION_ACK_TIMEOUT_MS}ms`))
+        }
+      }, PiRpcBridge.NEW_SESSION_ACK_TIMEOUT_MS).unref()
+      this.pendingNewSession = {
+        id,
+        resolve: () => { clearTimeout(timer); resolve() },
+        reject: (err) => { clearTimeout(timer); reject(err) },
+      }
+      this.child!.stdin!.write(cmd + '\n')
+    })
   }
 
   async waitForActiveCompletion(): Promise<void> {
@@ -237,6 +263,14 @@ export class PiRpcBridge {
     }
     const obj = parsed as Record<string, unknown>
     if (obj.type === 'response') {
+      // Resolve a pending new_session ack if its id matches.
+      const pending = this.pendingNewSession
+      if (pending && obj.command === 'new_session' && asString(obj.id) === pending.id) {
+        this.pendingNewSession = null
+        if (obj.success === true) pending.resolve()
+        else pending.reject(new Error(`pi rejected new_session: ${asString(obj.error) ?? 'unknown'}`))
+        return
+      }
       // Pi emits a single response per command. success:false means the prompt
       // never reached the agent loop — terminalize the run.
       if (obj.success === false && this.active) {
@@ -373,6 +407,11 @@ export class PiRpcBridge {
     // Fresh child gets fresh state; the next send shouldn't think it owes pi
     // a new_session for the previous owner's sessionKey.
     this.lastSessionKey = null
+    if (this.pendingNewSession) {
+      const p = this.pendingNewSession
+      this.pendingNewSession = null
+      p.reject(new Error('pi child exited before acking new_session'))
+    }
 
     if (wasActive && !wasActive.terminalized) {
       await this.terminalize(

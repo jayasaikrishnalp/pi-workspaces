@@ -648,10 +648,9 @@ test('after a clean run, a fresh send works for a new runId', async () => {
 
 // ---- F5: per-session pi reset ---------------------------------------------
 
-test('switching sessionKey between sends emits a new_session RPC to pi before the next prompt', async () => {
+test('switching sessionKey: bridge writes new_session, WAITS for ack, THEN writes prompt', async () => {
   const ctx = await makeBridge()
 
-  // First run on session A.
   ctx.tracker.start('sessA', 'r1')
   await startRunOnDisk(ctx.runStore, 'r1', 'sessA', 'hi from A')
   const done1 = waitForEvent(ctx.bus, 'run.completed')
@@ -662,26 +661,34 @@ test('switching sessionKey between sends emits a new_session RPC to pi before th
   fake.pushJson({ type: 'agent_end', messages: [] })
   await done1
 
-  // Second run on a different session — this is "+ New Session" in Hive.
+  // Different session — send() must NOT resolve until pi acks new_session,
+  // and the prompt must NOT have hit stdin until then.
   ctx.tracker.start('sessB', 'r2')
   await startRunOnDisk(ctx.runStore, 'r2', 'sessB', 'hi from B')
   const done2 = waitForEvent(ctx.bus, 'run.completed')
-  await ctx.bridge.send({ sessionKey: 'sessB', runId: 'r2', prompt: 'hi from B' })
+  const sendPromise = ctx.bridge.send({ sessionKey: 'sessB', runId: 'r2', prompt: 'hi from B' })
 
-  // Three commands should have hit pi's stdin in order:
-  //   [0] prompt id=r1 message="hi from A"
-  //   [1] new_session                       ← session changed sessA → sessB
-  //   [2] prompt id=r2 message="hi from B"
-  const cmds = fake.linesIn.map((l) => JSON.parse(l))
-  assert.equal(cmds.length, 3, `expected 3 stdin commands, got ${cmds.length}: ${JSON.stringify(cmds)}`)
-  assert.equal(cmds[0].type, 'prompt')
-  assert.equal(cmds[0].message, 'hi from A')
-  assert.equal(cmds[1].type, 'new_session', 'second command must be new_session before a different-session prompt')
+  // Give the bridge a tick to write new_session.
+  await new Promise((r) => setImmediate(r))
+
+  // Only new_session has been written so far. Pi processes lines without
+  // awaiting (`void handleInputLine` in pi-mono rpc-mode.ts), so writing
+  // the prompt now would race against the still-running newSession() and
+  // operate on the soon-to-be-replaced agent state.
+  let cmds = fake.linesIn.map((l) => JSON.parse(l))
+  assert.equal(cmds.length, 2, `expected 2 stdin cmds (prompt-A then new_session), got ${cmds.length}: ${JSON.stringify(cmds)}`)
+  assert.equal(cmds[1].type, 'new_session')
+  const newSessionId = cmds[1].id
+
+  // Ack the new_session — bridge should release the queued prompt.
+  fake.pushJson({ id: newSessionId, type: 'response', command: 'new_session', success: true, data: { cancelled: false } })
+  await sendPromise
+
+  cmds = fake.linesIn.map((l) => JSON.parse(l))
+  assert.equal(cmds.length, 3, `prompt should be written after ack, got ${cmds.length} cmds`)
   assert.equal(cmds[2].type, 'prompt')
   assert.equal(cmds[2].message, 'hi from B')
 
-  // Pi acks the new_session and the prompt; we ack each in turn.
-  fake.pushJson({ id: cmds[1].id ?? 'ns', type: 'response', command: 'new_session', success: true, data: { cancelled: false } })
   fake.pushJson({ id: 'r2', type: 'response', command: 'prompt', success: true })
   fake.pushJson({ type: 'agent_start' })
   fake.pushJson({ type: 'agent_end', messages: [] })
