@@ -25,6 +25,7 @@ The system SHALL expose `GET /api/probe` returning a structured capability matri
   agents: { count: number };
   workflows: { count: number };
   memory: { count: number };
+  mcp: { servers: McpServerStatus[] };  // see openspec/specs/mcp
   auth: { piAuthJsonPresent: boolean };
   workspace: { skillsDir: string; kbRoot: string; runsDir: string };
 }
