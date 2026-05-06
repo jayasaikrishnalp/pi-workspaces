@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 
 import type { Wiring } from '../server/wiring.js'
 import { jsonError, jsonOk, readJsonBody } from '../server/http-helpers.js'
+import { autoTitleIfMissing } from '../server/session-titles.js'
 
 export const SEND_STREAM_PATH = '/api/send-stream'
 
@@ -54,6 +55,13 @@ export async function handleSendStream(
       return
     }
     throw err
+  }
+
+  // Auto-title from the first prompt — no-op if the user already named it
+  // or if SQLite isn't available. Best-effort; never fail the send on this.
+  if (w.db) {
+    try { autoTitleIfMissing(w.db, sessionKey, message) }
+    catch (err) { console.error('[send-stream] auto-title failed:', err) }
   }
 
   try {

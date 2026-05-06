@@ -221,9 +221,11 @@ export const fetchDashboardIntelligence = (windowDays: number) =>
 
 /* ===== Sessions ===== */
 
-export interface SessionInfo { sessionKey: string; createdAt: number }
+export interface SessionInfo { sessionKey: string; createdAt: number; title?: string }
 export const listSessions = () => api.get<{ sessions: SessionInfo[] }>('/api/sessions')
 export const createSession = () => api.post<{ sessionKey: string }>('/api/sessions')
+export const setSessionTitle = (sessionKey: string, title: string) =>
+  api.put<{ title: string | null }>(`/api/sessions/${encodeURIComponent(sessionKey)}/title`, { title })
 
 /* ===== Memory CRUD ===== */
 

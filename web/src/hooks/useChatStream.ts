@@ -145,5 +145,29 @@ export function useChatStream() {
 
   const reset = useCallback(() => dispatch({ kind: 'reset' }), [])
 
-  return { ...state, sessionKey, currentRunId, send, abort, reset }
+  /** Switch to an existing session. Resets state; the hydrate effect refills it. */
+  const switchSession = useCallback((nextKey: string) => {
+    if (!nextKey || nextKey === sessionKey) return
+    dispatch({ kind: 'reset' })
+    setCurrentRunId(null)
+    sessionStorage.setItem('hive.sessionKey', nextKey)
+    setSessionKey(nextKey)
+  }, [sessionKey])
+
+  /** Create a fresh session and switch to it. */
+  const newSession = useCallback(async () => {
+    try {
+      const r = await fetch('/api/sessions', { method: 'POST', credentials: 'same-origin' })
+      if (!r.ok) return
+      const body = (await r.json()) as SessionResp
+      switchSession(body.sessionKey)
+    } catch (err) {
+      console.error('[useChatStream] newSession failed:', err)
+    }
+  }, [switchSession])
+
+  return {
+    ...state, sessionKey, currentRunId,
+    send, abort, reset, switchSession, newSession,
+  }
 }

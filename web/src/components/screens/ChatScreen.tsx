@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Composer } from '../chat/Composer'
 import { Message } from '../chat/Message'
+import { SessionsSidebar } from '../chat/SessionsSidebar'
 import { useChatStream } from '../../hooks/useChatStream'
+import { listSessions, setSessionTitle, type SessionInfo } from '../../lib/api'
 
 interface Props { onSaveSkill?: (body: string) => void }
 
@@ -72,6 +74,52 @@ export function ChatScreen({ onSaveSkill }: Props = {}): JSX.Element {
   const [seed, setSeed] = useState<string | undefined>(undefined)
   const [seedNonce, setSeedNonce] = useState(0)
 
+  // Sidebar collapse state. Persist across reloads. Default open.
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    return window.localStorage.getItem('hive.chatSidebar') !== 'closed'
+  })
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('hive.chatSidebar', sidebarOpen ? 'open' : 'closed')
+  }, [sidebarOpen])
+  // Ctrl+B / Cmd+B toggles sidebar (Hermes pattern).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault()
+        setSidebarOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Sessions list — refresh on mount, after sends complete, and after rename.
+  const [sessions, setSessions] = useState<SessionInfo[]>([])
+  const refreshSessions = useCallback(async () => {
+    try {
+      const r = await listSessions()
+      setSessions(r.sessions)
+    } catch (err) {
+      console.error('[ChatScreen] listSessions failed:', err)
+    }
+  }, [])
+  useEffect(() => { void refreshSessions() }, [refreshSessions])
+  // Refresh after each send terminates so a new auto-title shows up.
+  useEffect(() => {
+    if (!chat.streaming && chat.sessionKey) void refreshSessions()
+  }, [chat.streaming, chat.sessionKey, refreshSessions])
+
+  const handleRename = useCallback(async (key: string, title: string) => {
+    try {
+      await setSessionTitle(key, title)
+      await refreshSessions()
+    } catch (err) {
+      console.error('[ChatScreen] rename failed:', err)
+    }
+  }, [refreshSessions])
+
   // Autoscroll on new messages or text growth.
   useEffect(() => {
     const el = scrollRef.current
@@ -84,7 +132,27 @@ export function ChatScreen({ onSaveSkill }: Props = {}): JSX.Element {
   }
 
   return (
-    <div className="chat-screen" data-testid="chat">
+    <div className={`chat-screen ${sidebarOpen ? 'with-sidebar' : 'no-sidebar'}`} data-testid="chat">
+      {sidebarOpen ? (
+        <SessionsSidebar
+          sessions={sessions}
+          activeKey={chat.sessionKey}
+          onPick={chat.switchSession}
+          onNewSession={() => { void chat.newSession() }}
+          onRename={(key, title) => { void handleRename(key, title) }}
+        />
+      ) : null}
+      <button
+        type="button"
+        className="sb-toggle"
+        title={sidebarOpen ? 'Hide sessions (⌘B)' : 'Show sessions (⌘B)'}
+        aria-label="Toggle sessions sidebar"
+        onClick={() => setSidebarOpen((v) => !v)}
+        data-testid="sb-toggle"
+      >
+        {sidebarOpen ? '◀' : '▶'}
+      </button>
+      <div className="chat-pane">
       <div className="chat-scroll" ref={scrollRef} data-testid="chat-scroll">
         <div className="chat-stack">
           {chat.messages.length === 0 ? (
@@ -139,6 +207,7 @@ export function ChatScreen({ onSaveSkill }: Props = {}): JSX.Element {
         seedNonce={seedNonce}
         onAbort={chat.abort}
       />
+      </div>
     </div>
   )
 }

@@ -6,12 +6,19 @@ import {
   jsonOk,
   matchPath,
   parsePath,
+  readJsonBody,
 } from '../server/http-helpers.js'
 import type { SessionInfo } from '../types/run.js'
+import {
+  getSessionTitle,
+  setSessionTitle,
+  TITLE_LIMITS,
+} from '../server/session-titles.js'
 
 const PATH_LIST = '/api/sessions'
 const PATH_ACTIVE_RUN = '/api/sessions/:sessionKey/active-run'
 const PATH_MESSAGES = '/api/sessions/:sessionKey/messages'
+const PATH_TITLE = '/api/sessions/:sessionKey/title'
 
 /**
  * Stable session id format: `sess_<epochMs>_<rand6>`.
@@ -31,8 +38,57 @@ export function handleSessionsCreate(_req: IncomingMessage, res: ServerResponse,
 }
 
 export function handleSessionsList(_req: IncomingMessage, res: ServerResponse, w: Wiring): void {
-  const sessions = Array.from(w.sessions.values())
+  const sessions = Array.from(w.sessions.values()).map((s) => {
+    const title = w.db ? getSessionTitle(w.db, s.sessionKey) : undefined
+    return title ? { ...s, title } : s
+  })
   jsonOk(res, 200, { sessions })
+}
+
+/**
+ * PUT /api/sessions/:key/title — set or clear the manual title.
+ * Empty body title → clear (returns title:null). Otherwise trims and saves.
+ */
+export async function handleSessionTitle(
+  req: IncomingMessage,
+  res: ServerResponse,
+  w: Wiring,
+): Promise<void> {
+  const params = matchPath(PATH_TITLE, parsePath(req.url))
+  if (!params || !params.sessionKey) {
+    jsonError(res, 404, 'NOT_FOUND', 'unknown title path')
+    return
+  }
+  const sessionKey = params.sessionKey
+  if (!w.sessions.has(sessionKey)) {
+    jsonError(res, 404, 'UNKNOWN_SESSION', `session ${sessionKey} does not exist`)
+    return
+  }
+
+  let body: unknown
+  try {
+    body = await readJsonBody(req)
+  } catch (err) {
+    jsonError(res, 400, 'BAD_REQUEST', (err as Error).message)
+    return
+  }
+  const title = (body && typeof body === 'object' ? (body as { title?: unknown }).title : undefined)
+  if (typeof title !== 'string') {
+    jsonError(res, 400, 'BAD_REQUEST', 'title must be a string')
+    return
+  }
+  if (title.trim().length > TITLE_LIMITS.MAX_TITLE_LEN) {
+    jsonError(res, 400, 'BAD_REQUEST', `title exceeds ${TITLE_LIMITS.MAX_TITLE_LEN} chars`)
+    return
+  }
+  if (!w.db) {
+    jsonError(res, 503, 'NO_DB', 'session-titles requires SQLite')
+    return
+  }
+
+  setSessionTitle(w.db, sessionKey, title)
+  const stored = getSessionTitle(w.db, sessionKey)
+  jsonOk(res, 200, { title: stored ?? null })
 }
 
 export async function handleActiveRun(
@@ -244,4 +300,5 @@ export const SESSIONS_PATTERNS = {
   list: PATH_LIST,
   activeRun: PATH_ACTIVE_RUN,
   messages: PATH_MESSAGES,
+  title: PATH_TITLE,
 }
