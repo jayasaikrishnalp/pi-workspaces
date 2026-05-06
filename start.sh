@@ -51,4 +51,13 @@ echo "[start] frontend (Vite) → http://127.0.0.1:5173"
 (cd web && npm run dev -- --host 127.0.0.1) &
 PIDS+=($!)
 
-wait -n
+# bash 3.2 (macOS) doesn't support `wait -n`; poll instead.
+while true; do
+  for pid in "${PIDS[@]}"; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "[start] child $pid exited; shutting down."
+      exit 0
+    fi
+  done
+  sleep 1
+done
