@@ -1192,6 +1192,67 @@
   font-size: 14px; line-height: 1.55;
   white-space: pre-wrap;
 }
+/* Assistant markdown — disable pre-wrap; let markdown handle whitespace. */
+.chat-msg-text-md {
+  white-space: normal;
+}
+.chat-msg-text-md > :first-child { margin-top: 0; }
+.chat-msg-text-md > :last-child  { margin-bottom: 0; }
+.chat-msg-text-md p     { margin: 8px 0; line-height: 1.55; }
+.chat-msg-text-md h1    { font-size: 20px; font-weight: 700; margin: 16px 0 8px; }
+.chat-msg-text-md h2    { font-size: 17px; font-weight: 700; margin: 14px 0 6px; }
+.chat-msg-text-md h3    { font-size: 15px; font-weight: 700; margin: 12px 0 4px; }
+.chat-msg-text-md h4    { font-size: 14px; font-weight: 700; margin: 10px 0 4px; }
+.chat-msg-text-md ul,
+.chat-msg-text-md ol    { margin: 6px 0; padding-left: 22px; }
+.chat-msg-text-md li    { margin: 2px 0; }
+.chat-msg-text-md a     { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.chat-msg-text-md a:hover { color: var(--accent-hover); }
+.chat-msg-text-md strong { font-weight: 700; color: var(--text-primary); }
+.chat-msg-text-md em     { font-style: italic; }
+.chat-msg-text-md hr     { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
+.chat-msg-text-md blockquote {
+  margin: 8px 0; padding: 4px 12px;
+  border-left: 3px solid var(--border-accent);
+  color: var(--text-secondary);
+}
+/* Inline + fenced code */
+.chat-msg-text-md code {
+  font-family: var(--font-mono); font-size: 12.5px;
+  background: rgba(255,255,255,0.06);
+  padding: 1px 6px; border-radius: 4px;
+}
+.chat-msg-text-md pre {
+  margin: 10px 0;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+.chat-msg-text-md pre code {
+  background: transparent; padding: 0;
+  font-size: 12.5px; color: var(--text-primary);
+  white-space: pre;
+}
+/* GFM tables */
+.chat-msg-text-md table {
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 13px;
+  display: block; overflow-x: auto;
+}
+.chat-msg-text-md th,
+.chat-msg-text-md td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.chat-msg-text-md thead th {
+  background: rgba(255,255,255,0.04);
+  font-weight: 600;
+}
 .chat-msg-thinking {
   background: rgba(255, 255, 255, 0.02);
   border-left: 2px solid var(--accent-deep);
