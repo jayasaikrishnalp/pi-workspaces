@@ -88,7 +88,11 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   const bus = getChatEventBus()
   const runStore = options.runStore ?? new RunStore({ root: path.join(root, 'runs') })
   const tracker = getSendRunTracker()
-  const bridge = getPiRpcBridge({ runStore, bus, tracker })
+  // Construct stores BEFORE the bridge so the bridge can subscribe to
+  // secret-store 'change' events (Phase 3 — secret env injection).
+  const authStore = getAuthStore({ workspaceRoot: root })
+  const secretStore = getSecretStore({ workspaceRoot: root })
+  const bridge = getPiRpcBridge({ runStore, bus, tracker, secretStore })
   const sessions = new Map<string, SessionInfo>()
   const kbBus = getKbEventBus()
 
@@ -136,13 +140,11 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     confluenceConfigError = 'CONFLUENCE_BASE_URL / ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN (or JIRA_TOKEN) not all set'
   }
 
-  const authStore = getAuthStore({ workspaceRoot: root })
-  const secretStore = getSecretStore({ workspaceRoot: root })
   const spawnPi: SpawnPi = options.spawnPi ?? ((args, opts) => spawn('pi', [...args], opts ?? {}))
   const bashPath = process.env.PI_WORKSPACE_BASH_PATH ?? '/bin/bash'
   const spawnBash: SpawnPi = (args, opts) => spawn(bashPath, [...args], opts ?? {})
 
-  const mcpBroker = new McpBroker(loadSeedConfig())
+  const mcpBroker = new McpBroker(loadSeedConfig(process.env, secretStore))
   const db = openDb(path.join(root, 'data.sqlite'))
 
   // Mirror chat-event-bus events into chat_messages so the dashboard

@@ -153,3 +153,76 @@ test('corrupt secrets.json boots clean (best-effort, never throws)', async () =>
   await s.setSecret('k', 'v')
   assert.equal(s.getSecret('k'), 'v')
 })
+
+// ---- Phase 3: env mapper + change events ----------------------------------
+
+import { buildSecretEnv } from '../src/server/secret-store.ts'
+
+test('buildSecretEnv: aws.* secrets map to AWS_* env vars', () => {
+  const s = new SecretStore({ workspaceRoot: tmpRoot() })
+  // setSecret needs load() first; for a pure unit-style env-build we can
+  // use a fake `getByPrefix`-shaped object.
+  const fake = {
+    getByPrefix: (p) => p === 'aws.' ? {
+      'aws.access_key_id': 'AKIAEXAMPLE',
+      'aws.secret_access_key': 'sekret',
+      'aws.session_token': 'tok',
+      'aws.region': 'us-east-1',
+    } : {},
+  }
+  const env = buildSecretEnv(fake)
+  assert.equal(env.AWS_ACCESS_KEY_ID, 'AKIAEXAMPLE')
+  assert.equal(env.AWS_SECRET_ACCESS_KEY, 'sekret')
+  assert.equal(env.AWS_SESSION_TOKEN, 'tok')
+  assert.equal(env.AWS_DEFAULT_REGION, 'us-east-1')
+  // Originals are NOT included — env should be flat AWS_*/ARM_* only.
+  assert.equal(env['aws.access_key_id'], undefined)
+})
+
+test('buildSecretEnv: azure.* maps to BOTH ARM_* and AZURE_* (Terraform + SDK conventions)', () => {
+  const fake = {
+    getByPrefix: (p) => p === 'azure.' ? {
+      'azure.client_id': 'cid',
+      'azure.client_secret': 'csec',
+      'azure.tenant_id': 'tid',
+      'azure.subscription_id': 'sid',
+    } : {},
+  }
+  const env = buildSecretEnv(fake)
+  // Terraform convention
+  assert.equal(env.ARM_CLIENT_ID, 'cid')
+  assert.equal(env.ARM_CLIENT_SECRET, 'csec')
+  assert.equal(env.ARM_TENANT_ID, 'tid')
+  assert.equal(env.ARM_SUBSCRIPTION_ID, 'sid')
+  // Azure SDK convention
+  assert.equal(env.AZURE_CLIENT_ID, 'cid')
+  assert.equal(env.AZURE_CLIENT_SECRET, 'csec')
+  assert.equal(env.AZURE_TENANT_ID, 'tid')
+  assert.equal(env.AZURE_SUBSCRIPTION_ID, 'sid')
+})
+
+test('buildSecretEnv: empty store returns empty object', () => {
+  const fake = { getByPrefix: () => ({}) }
+  assert.deepEqual(buildSecretEnv(fake), {})
+})
+
+test('SecretStore emits "change" on setSecret', async () => {
+  const s = new SecretStore({ workspaceRoot: tmpRoot() })
+  await s.load()
+  let count = 0
+  s.on('change', () => { count++ })
+  await s.setSecret('k', 'v')
+  await s.setSecret('k2', 'v2')
+  assert.equal(count, 2)
+})
+
+test('SecretStore emits "change" on deleteSecret (only when something was deleted)', async () => {
+  const s = new SecretStore({ workspaceRoot: tmpRoot() })
+  await s.load()
+  await s.setSecret('k', 'v')
+  let count = 0
+  s.on('change', () => { count++ })
+  await s.deleteSecret('k')          // hit → fires
+  await s.deleteSecret('not-there')  // miss → does NOT fire
+  assert.equal(count, 1)
+})

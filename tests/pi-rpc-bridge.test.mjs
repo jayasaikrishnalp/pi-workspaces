@@ -726,3 +726,43 @@ test('same sessionKey on consecutive sends does NOT emit new_session', async () 
   fake.pushJson({ type: 'agent_end', messages: [] })
   await done2
 })
+
+// ---- Phase 3: secret-driven env injection + recycle on change -------------
+
+import { SecretStore } from '../src/server/secret-store.ts'
+
+test('bridge recycles pi child on secret-store change', async () => {
+  const root = tmpStoreRoot()
+  const store = new SecretStore({ workspaceRoot: path.join(root, 'ws') })
+  await store.load()
+
+  let fake
+  const PiRpcBridge = (await import('../src/server/pi-rpc-bridge.ts')).PiRpcBridge
+  const runStore = new (await import('../src/server/run-store.ts')).RunStore({ root: path.join(root, 'runs') })
+  const bus = new (await import('../src/server/chat-event-bus.ts')).ChatEventBus()
+  const tracker = new (await import('../src/server/send-run-tracker.ts')).SendRunTracker()
+  const bridge = new PiRpcBridge({
+    runStore, bus, tracker, secretStore: store,
+    spawnPi: () => { fake = makeFakeChild(); return fake },
+  })
+
+  // Spawn pi by sending a prompt and finishing it cleanly.
+  tracker.start('s1', 'r1')
+  await runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'hi' })
+  const done = waitForEvent(bus, 'run.completed')
+  await bridge.send({ sessionKey: 's1', runId: 'r1', prompt: 'hi' })
+  fake.pushJson({ id: 'r1', type: 'response', command: 'prompt', success: true })
+  fake.pushJson({ type: 'agent_start' })
+  fake.pushJson({ type: 'agent_end', messages: [] })
+  await done
+
+  // No active run; child is alive and ready.
+  assert.equal(fake.killed, false, 'sanity: pi child alive after a clean run')
+
+  // Mutate the store → bridge should kill the child.
+  await store.setSecret('aws.region', 'us-east-1')
+  // SecretStore emits 'change' synchronously after persist; recycleChild()
+  // runs in-band. Allow one microtask for the kill() call to mark `killed`.
+  await new Promise((r) => setImmediate(r))
+  assert.equal(fake.killed, true, 'pi child must be recycled when secrets change')
+})

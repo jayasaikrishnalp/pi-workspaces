@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import type { McpServerConfig } from '../types/mcp.js'
+import { buildSecretEnv, type SecretReader } from './secret-store.js'
 
 /**
  * Resolve the Ref API key with this precedence:
@@ -32,9 +33,19 @@ export function resolveRefApiKey(env: NodeJS.ProcessEnv = process.env, claudeJso
 /**
  * The hardcoded v1 catalog. Multi-server config (add/remove/enable/disable)
  * lands with the frontend Settings tab.
+ *
+ * Phase 3: when a SecretReader is provided, AWS / ARM / AZURE env vars
+ * derived from `aws.` / `azure.` secret prefixes are merged into each
+ * stdio server's child env. Future MCP servers like aws-mcp / terraform-mcp
+ * pick them up automatically through the existing process.env spread merge
+ * in StdioMcpClient.
  */
-export function loadSeedConfig(env: NodeJS.ProcessEnv = process.env): McpServerConfig[] {
+export function loadSeedConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  secretStore?: SecretReader | null,
+): McpServerConfig[] {
   const refKey = resolveRefApiKey(env)
+  const secretEnv = secretStore ? buildSecretEnv(secretStore) : {}
   const catalog: McpServerConfig[] = [
     {
       id: 'ref',
@@ -47,7 +58,7 @@ export function loadSeedConfig(env: NodeJS.ProcessEnv = process.env): McpServerC
       kind: 'stdio',
       command: 'npx',
       args: ['-y', '@upstash/context7-mcp@latest'],
-      env: {},
+      env: { ...secretEnv },
     },
   ]
   return catalog

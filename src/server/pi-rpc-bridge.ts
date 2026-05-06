@@ -7,6 +7,7 @@ import type { MapperContext, MapperState, NormalizedEvent } from '../events/inde
 import type { RunStore } from './run-store.js'
 import type { ChatEventBus } from './chat-event-bus.js'
 import type { SendRunTracker } from './send-run-tracker.js'
+import { buildSecretEnv, type SecretStore } from './secret-store.js'
 
 interface ActiveRun {
   runId: string
@@ -34,6 +35,11 @@ export interface BridgeDeps {
   tracker: SendRunTracker
   spawnPi?: () => ChildProcess
   cwd?: string
+  /** Optional. When present, bridge subscribes to its 'change' event and
+   *  kills the pi child so the next prompt respawns with fresh env. Also
+   *  used at every spawn to compute env-var injections from secret
+   *  prefixes (aws., azure. → AWS_, ARM_, AZURE_). */
+  secretStore?: SecretStore | null
 }
 
 const RESTART_BACKOFF_MS = [0, 1_000, 5_000, 30_000]
@@ -59,6 +65,24 @@ export class PiRpcBridge {
 
   constructor(deps: BridgeDeps) {
     this.deps = deps
+    // Phase 3: when secrets change, recycle pi so the next send sees fresh env.
+    // The bridge is a long-lived singleton — registering once is correct.
+    if (deps.secretStore) {
+      deps.secretStore.on('change', () => this.recycleChild())
+    }
+  }
+
+  /** Kill the pi child so the next send spawns a fresh one with refreshed env.
+   *  No-op if no child is running or a run is already in flight (we don't want
+   *  to interrupt mid-stream — the next idle send will pick up the new env
+   *  on next spawn anyway, and the mid-flight run is already commit-bound to
+   *  the env it was spawned with). */
+  private recycleChild(): void {
+    if (this.terminated) return
+    if (this.active) return                 // mid-run; let it finish
+    const child = this.child
+    if (!child || child.killed) return
+    try { child.kill('SIGTERM') } catch {}
   }
 
   /** Send a prompt for a fresh run. Spawns pi if needed. Throws BRIDGE_BUSY if a run is in flight. */
@@ -215,10 +239,18 @@ export class PiRpcBridge {
   }
 
   private async spawnChild(): Promise<void> {
+    // Phase 3: snapshot the secret store at spawn time so pi (and pi's bash
+    // tool, by env inheritance) sees the workspace's credentials. When the
+    // user updates a secret, we kill the child via the 'change' subscriber
+    // below — the next prompt respawns with the refreshed env.
+    const secretEnv = this.deps.secretStore
+      ? buildSecretEnv(this.deps.secretStore)
+      : {}
     const child = this.deps.spawnPi
       ? this.deps.spawnPi()
       : spawn('pi', ['--mode', 'rpc'], {
           cwd: this.deps.cwd ?? process.cwd(),
+          env: { ...process.env, ...secretEnv },
           stdio: ['pipe', 'pipe', 'pipe'],
           detached: true,
         })

@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { EventEmitter } from 'node:events'
 
 /**
  * Per-workspace secret store. File-backed JSON at <workspaceRoot>/secrets.json.
@@ -24,12 +25,21 @@ interface SecretRow {
   updatedAt: number
 }
 
-export class SecretStore {
+/**
+ * Events emitted on the SecretStore EventEmitter:
+ *
+ *   'change'  — fired after any successful setSecret or deleteSecret. The
+ *               PiRpcBridge subscribes to this so the next prompt respawns
+ *               pi with fresh env (else pi would keep stale credentials in
+ *               its already-spawned bash environment).
+ */
+export class SecretStore extends EventEmitter {
   private readonly secretsPath: string
   private secrets = new Map<string, SecretRow>()
   private loaded = false
 
   constructor(opts: SecretStoreOptions) {
+    super()
     this.secretsPath = path.join(opts.workspaceRoot, 'secrets.json')
   }
 
@@ -74,6 +84,7 @@ export class SecretStore {
     }
     this.secrets.set(trimmed, { value, updatedAt: Date.now() })
     await this.persist()
+    this.emit('change')
   }
 
   /** Get a secret value. Trims whitespace from key for symmetry with setSecret. */
@@ -99,6 +110,7 @@ export class SecretStore {
     if (trimmed.length === 0) return false
     if (!this.secrets.delete(trimmed)) return false
     await this.persist()
+    this.emit('change')
     return true
   }
 
@@ -137,4 +149,52 @@ export function getSecretStore(opts: SecretStoreOptions): SecretStore {
 
 export function _resetSecretStoreForTests(): void {
   globalThis.__secretStore = undefined
+}
+
+/**
+ * Map secret-store entries into the env-var bag pi's bash tool and MCP
+ * server children should see at spawn time.
+ *
+ *   aws.<field>    →  AWS_<UPPER_FIELD>           (special-case region)
+ *   azure.<field>  →  ARM_<UPPER_FIELD> + AZURE_<UPPER_FIELD>
+ *
+ * Designed against a minimal interface so unit tests can pass a fake
+ * `{ getByPrefix }` without instantiating the full SecretStore.
+ */
+export interface SecretReader {
+  getByPrefix(prefix: string): Record<string, string>
+}
+
+const AWS_FIELD_TO_ENV: Record<string, string> = {
+  access_key_id: 'AWS_ACCESS_KEY_ID',
+  secret_access_key: 'AWS_SECRET_ACCESS_KEY',
+  session_token: 'AWS_SESSION_TOKEN',
+  region: 'AWS_DEFAULT_REGION',
+}
+
+const AZURE_FIELDS = ['client_id', 'client_secret', 'tenant_id', 'subscription_id'] as const
+
+export function buildSecretEnv(store: SecretReader): Record<string, string> {
+  const env: Record<string, string> = {}
+
+  // AWS
+  const aws = store.getByPrefix('aws.')
+  for (const [k, v] of Object.entries(aws)) {
+    const field = k.slice('aws.'.length) // e.g. "access_key_id"
+    const envName = AWS_FIELD_TO_ENV[field]
+    if (envName) env[envName] = v
+  }
+
+  // Azure — emit BOTH ARM_ (Terraform) and AZURE_ (azure-sdk / CLI).
+  const azure = store.getByPrefix('azure.')
+  for (const field of AZURE_FIELDS) {
+    const v = azure[`azure.${field}`]
+    if (typeof v === 'string' && v.length > 0) {
+      const upper = field.toUpperCase()
+      env[`ARM_${upper}`] = v
+      env[`AZURE_${upper}`] = v
+    }
+  }
+
+  return env
 }
