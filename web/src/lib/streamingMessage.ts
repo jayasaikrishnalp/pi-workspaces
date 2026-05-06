@@ -173,6 +173,7 @@ export function reduce(state: ChatState, e: ChatEvent): ChatState {
     }
 
     case 'pi.error':
+    case 'run.failed':
     case 'pi.run.failed': {
       const errMsg = String(e.data.message ?? e.data.error ?? 'pi error')
       return {
@@ -187,6 +188,8 @@ export function reduce(state: ChatState, e: ChatEvent): ChatState {
       }
     }
 
+    case 'run.completed':
+    case 'run.cancelled':
     case 'pi.run.completed':
     case 'pi.run.cancelled':
       return {

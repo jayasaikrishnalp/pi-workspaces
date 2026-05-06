@@ -26,7 +26,12 @@ export const CHAT_EVENT_NAMES = [
   'thinking.start', 'thinking.delta', 'thinking.end',
   'tool.call.start', 'tool.call.delta', 'tool.call.end',
   'tool.result', 'tool.exec.start', 'tool.exec.update', 'tool.exec.end',
-  'pi.error', 'pi.run.completed', 'pi.run.failed', 'pi.run.cancelled',
+  'pi.error',
+  // Real backend emits run.* (no prefix); kept the pi.run.* aliases for
+  // back-compat with synthetic test fixtures and any older traces.
+  'run.start', 'run.completed', 'run.failed', 'run.cancelled',
+  'pi.run.completed', 'pi.run.failed', 'pi.run.cancelled',
+  'turn.start', 'turn.end', 'user.message',
   'heartbeat',
 ] as const
 

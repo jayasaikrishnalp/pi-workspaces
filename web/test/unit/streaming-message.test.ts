@@ -136,7 +136,34 @@ describe('streamingMessage reducer', () => {
     expect(tc.error).toBe('exit 1')
   })
 
-  it('pi.run.failed marks the latest assistant as errored and clears streaming', () => {
+  it('run.completed clears streaming flag (backend emits run.completed, not pi.run.completed)', () => {
+    const s = feed(INITIAL_CHAT_STATE,
+      { event: 'assistant.start', data: { messageId: 'm1' } },
+      { event: 'assistant.delta', data: { messageId: 'm1', delta: 'done' } },
+      { event: 'run.completed', data: { runId: 'r1', status: 'success' } },
+    )
+    expect(s.streaming).toBe(false)
+    expect(s.messages[0]!.streaming).toBe(false)
+  })
+
+  it('run.cancelled clears streaming flag', () => {
+    const s = feed(INITIAL_CHAT_STATE,
+      { event: 'assistant.start', data: { messageId: 'm1' } },
+      { event: 'run.cancelled', data: { runId: 'r1', status: 'cancelled' } },
+    )
+    expect(s.streaming).toBe(false)
+  })
+
+  it('run.failed marks the latest assistant as errored and clears streaming', () => {
+    const s = feed(INITIAL_CHAT_STATE,
+      { event: 'assistant.start', data: { messageId: 'm1' } },
+      { event: 'run.failed', data: { error: 'pi binary not found (ENOENT)' } },
+    )
+    expect(s.streaming).toBe(false)
+    expect(s.messages[0]!.error).toMatch(/pi binary/)
+  })
+
+  it('pi.run.failed (legacy alias) still works for back-compat', () => {
     const s = feed(INITIAL_CHAT_STATE,
       { event: 'assistant.start', data: { messageId: 'm1' } },
       { event: 'pi.run.failed', data: { message: 'pi binary not found (ENOENT)' } },

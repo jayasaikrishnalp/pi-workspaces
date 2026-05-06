@@ -91,6 +91,9 @@ export function useChatStream() {
         // Clear currentRunId on terminal lifecycle events so the stop button
         // disappears and abort() becomes a no-op until the next send.
         if (
+          parsed.event === 'run.completed' ||
+          parsed.event === 'run.cancelled' ||
+          parsed.event === 'run.failed' ||
           parsed.event === 'pi.run.completed' ||
           parsed.event === 'pi.run.cancelled' ||
           parsed.event === 'pi.run.failed'

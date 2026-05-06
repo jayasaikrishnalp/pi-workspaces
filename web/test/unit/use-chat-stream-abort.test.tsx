@@ -103,11 +103,19 @@ describe('useChatStream — abort flow', () => {
     )
   })
 
-  it('clears currentRunId on pi.run.completed', async () => {
+  it('clears currentRunId on pi.run.completed (legacy alias)', async () => {
     const { result, es } = await setupHook()
     await act(async () => { await result.current.send('hello') })
     expect(result.current.currentRunId).toBe('run-abc')
     act(() => { es().fire('pi.run.completed', { event: 'pi.run.completed', data: {} }) })
+    await waitFor(() => expect(result.current.currentRunId).toBeNull())
+  })
+
+  it('clears currentRunId on run.completed (real backend name)', async () => {
+    const { result, es } = await setupHook()
+    await act(async () => { await result.current.send('hello') })
+    expect(result.current.currentRunId).toBe('run-abc')
+    act(() => { es().fire('run.completed', { event: 'run.completed', data: { status: 'success' } }) })
     await waitFor(() => expect(result.current.currentRunId).toBeNull())
   })
 
