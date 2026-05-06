@@ -10,7 +10,7 @@ interface Props {
 }
 
 const VIBES = [
-  { id: 'default',  label: 'On-system (KodeKloud · dark)' },
+  { id: 'default',  label: 'System default (dark)' },
   { id: 'light',    label: 'Light mode' },
   { id: 'terminal', label: 'Terminal / CRT' },
   { id: 'sre',      label: 'SRE Console' },

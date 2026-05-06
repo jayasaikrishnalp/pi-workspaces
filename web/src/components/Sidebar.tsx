@@ -80,7 +80,6 @@ export function Sidebar(props: Props): JSX.Element {
           { id: 'chat', icon: <Icons.chat size={16} /> },
           { id: 'teams', icon: <Icons.swarm size={16} /> },
           { id: 'graph', icon: <Icons.graph size={16} /> },
-          { id: 'terminal', icon: <Icons.terminal size={16} /> },
           { id: 'workflows', icon: <Icons.conductor size={16} /> },
           { id: 'tasks', icon: <Icons.tasks size={16} /> },
           { id: 'jobs', icon: <Icons.jobs size={16} /> },
@@ -123,7 +122,6 @@ export function Sidebar(props: Props): JSX.Element {
       <SidebarGroup label="MAIN">
         <SidebarItem icon={<Icons.dashboard size={14} />} label="Dashboard" active={active === 'dashboard'} onClick={() => onPick('dashboard')} />
         <SidebarItem icon={<Icons.chat size={14} />} label="Chat" active={active === 'chat'} onClick={() => onPick('chat')} />
-        <SidebarItem icon={<Icons.terminal size={14} />} label="Terminal" active={active === 'terminal'} onClick={() => onPick('terminal')} />
         <SidebarItem icon={<Icons.jobs size={14} />} label="Jobs" active={active === 'jobs'} onClick={() => onPick('jobs')} />
         <SidebarItem
           icon={<Icons.tasks size={14} />}
