@@ -23,6 +23,7 @@ import {
   handleSessionsCreate,
   handleSessionsList,
   handleActiveRun,
+  handleSessionMessages,
 } from './routes/sessions.js'
 import { handleSendStream, SEND_STREAM_PATH } from './routes/send-stream.js'
 import { handleChatEvents, CHAT_EVENTS_PATH } from './routes/chat-events.js'
@@ -127,6 +128,7 @@ const ROUTES: Route[] = [
   { method: 'POST', pattern: '/api/sessions', handler: handleSessionsCreate },
   { method: 'GET', pattern: '/api/sessions', handler: handleSessionsList },
   { method: 'GET', pattern: '/api/sessions/:sessionKey/active-run', handler: handleActiveRun },
+  { method: 'GET', pattern: '/api/sessions/:sessionKey/messages', handler: handleSessionMessages },
   { method: 'POST', pattern: SEND_STREAM_PATH, handler: handleSendStream },
   { method: 'GET', pattern: CHAT_EVENTS_PATH, handler: handleChatEvents },
   { method: 'GET', pattern: RUNS_EVENTS_PATTERN, handler: handleRunEvents },

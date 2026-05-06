@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 
-import { reduce, INITIAL_CHAT_STATE, appendUserMessage, type ChatState } from '../lib/streamingMessage'
+import { reduce, INITIAL_CHAT_STATE, appendUserMessage, hydrate, type ChatMessage, type ChatState } from '../lib/streamingMessage'
 import { subscribeNamedEvents, CHAT_EVENT_NAMES } from '../lib/sse'
 
 interface ServerEvent {
@@ -12,13 +12,15 @@ interface ServerEvent {
 type ChatAction =
   | { kind: 'event'; event: ServerEvent }
   | { kind: 'user'; text: string }
+  | { kind: 'hydrate'; messages: ChatMessage[] }
   | { kind: 'reset' }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.kind) {
-    case 'event': return reduce(state, action.event)
-    case 'user':  return appendUserMessage(state, action.text)
-    case 'reset': return INITIAL_CHAT_STATE
+    case 'event':   return reduce(state, action.event)
+    case 'user':    return appendUserMessage(state, action.text)
+    case 'hydrate': return hydrate(state, action.messages)
+    case 'reset':   return INITIAL_CHAT_STATE
   }
 }
 
@@ -50,6 +52,31 @@ export function useChatStream() {
     })().catch((err) => console.error('[useChatStream] session bootstrap failed:', err))
     return () => { cancelled = true }
   }, [])
+
+  // Hydrate persisted history once we have a session. Runs alongside SSE; the
+  // server returns final ChatMessage shapes (final text + finalized toolCalls)
+  // so we don't replay streaming events.
+  useEffect(() => {
+    if (!sessionKey) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await fetch(
+          `/api/sessions/${encodeURIComponent(sessionKey)}/messages`,
+          { credentials: 'same-origin' },
+        )
+        if (!r.ok) return // silent: 404 = unknown session, leave state empty
+        const body = (await r.json()) as { messages?: ChatMessage[] }
+        if (cancelled) return
+        if (Array.isArray(body.messages) && body.messages.length > 0) {
+          dispatch({ kind: 'hydrate', messages: body.messages })
+        }
+      } catch (err) {
+        console.error('[useChatStream] hydrate failed:', err)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [sessionKey])
 
   // Open SSE once we have a session.
   useEffect(() => {

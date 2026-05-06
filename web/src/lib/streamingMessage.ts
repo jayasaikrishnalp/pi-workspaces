@@ -252,3 +252,12 @@ export function appendUserMessage(state: ChatState, text: string): ChatState {
   }
   return { ...state, messages: [...state.messages, msg] }
 }
+
+/**
+ * Replace messages wholesale from a hydrate-history payload. Used when a
+ * session is reopened and we want to surface its persisted ChatMessage[]
+ * without replaying streaming events.
+ */
+export function hydrate(state: ChatState, messages: ChatMessage[]): ChatState {
+  return { ...state, messages, streaming: false, error: null }
+}
