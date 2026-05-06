@@ -96,7 +96,9 @@ export function Message({ msg, onSaveSkill }: Props): JSX.Element {
       ) : null}
       {msg.toolCalls.length > 0 ? (
         <div className="chat-msg-tools">
-          {msg.toolCalls.map((c) => <ToolCard key={c.id} call={c} />)}
+          {msg.toolCalls.map((c) => (
+            <ToolCard key={c.id} call={c} messageStreaming={msg.streaming} />
+          ))}
         </div>
       ) : null}
       {renderText()}

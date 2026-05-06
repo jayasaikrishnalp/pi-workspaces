@@ -107,4 +107,66 @@ describe('ToolCard', () => {
     expect(screen.queryByTestId('tool-card-tc1-args')).toBeNull()
     expect(screen.queryByTestId('tool-card-tc1-result')).toBeNull()
   })
+
+  // ---- auto-collapse when the parent message stops streaming -------------
+
+  it('stays expanded while parent message is streaming and tool just completed', () => {
+    render(
+      <ToolCard
+        call={call({ status: 'completed', args: { command: 'ls' }, result: 'a.txt' })}
+        messageStreaming={true}
+      />,
+    )
+    expect(screen.getByTestId('tool-card-tc1-args')).toBeVisible()
+    expect(screen.getByTestId('tool-card-tc1-result')).toBeVisible()
+  })
+
+  it('auto-collapses when messageStreaming flips true → false (no user toggle)', () => {
+    const { rerender } = render(
+      <ToolCard
+        call={call({ status: 'completed', args: { command: 'ls' }, result: 'a.txt' })}
+        messageStreaming={true}
+      />,
+    )
+    expect(screen.getByTestId('tool-card-tc1-args')).toBeVisible()
+    rerender(
+      <ToolCard
+        call={call({ status: 'completed', args: { command: 'ls' }, result: 'a.txt' })}
+        messageStreaming={false}
+      />,
+    )
+    expect(screen.queryByTestId('tool-card-tc1-args')).toBeNull()
+    expect(screen.queryByTestId('tool-card-tc1-result')).toBeNull()
+  })
+
+  it('user toggle survives the messageStreaming false transition', () => {
+    const { rerender } = render(
+      <ToolCard
+        call={call({ status: 'completed', args: { command: 'ls' }, result: 'a.txt' })}
+        messageStreaming={true}
+      />,
+    )
+    // Card is auto-expanded; user explicitly clicks to close while streaming.
+    fireEvent.click(screen.getByRole('button', { expanded: true }))
+    expect(screen.queryByTestId('tool-card-tc1-args')).toBeNull()
+    // User RE-opens it.
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    expect(screen.getByTestId('tool-card-tc1-args')).toBeVisible()
+    // Streaming ends — user's open state must win, NOT auto-collapsed.
+    rerender(
+      <ToolCard
+        call={call({ status: 'completed', args: { command: 'ls' }, result: 'a.txt' })}
+        messageStreaming={false}
+      />,
+    )
+    expect(screen.getByTestId('tool-card-tc1-args')).toBeVisible()
+  })
+
+  it('messageStreaming undefined behaves as before (no auto-collapse)', () => {
+    render(
+      <ToolCard call={call({ status: 'completed', args: { command: 'ls' }, result: 'a.txt' })} />,
+    )
+    // No messageStreaming prop → auto-expand on completion stays expanded.
+    expect(screen.getByTestId('tool-card-tc1-args')).toBeVisible()
+  })
 })

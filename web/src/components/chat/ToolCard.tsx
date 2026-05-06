@@ -13,7 +13,17 @@ function phaseFor(call: ToolCall): { label: string; cls: string } {
   }
 }
 
-export function ToolCard({ call }: { call: ToolCall }): JSX.Element {
+interface Props {
+  call: ToolCall
+  /** Whether the parent assistant message is still streaming. When provided
+   *  and the value flips true → false, this card auto-collapses (so completed
+   *  chat history reads cleanly) — unless the user has explicitly toggled it.
+   *  When undefined, the older behavior (auto-expand on completion, stays open)
+   *  is preserved. */
+  messageStreaming?: boolean
+}
+
+export function ToolCard({ call, messageStreaming }: Props): JSX.Element {
   // Default expanded once a result lands so the user sees output without
   // clicking. After that, follow user toggles. Track whether user has
   // explicitly toggled so we don't override their preference.
@@ -22,10 +32,16 @@ export function ToolCard({ call }: { call: ToolCall }): JSX.Element {
 
   useEffect(() => {
     if (userToggled.current) return
+    // Once the parent message has finished streaming, collapse — keeps the
+    // historical view tidy. The user can click to expand for inspection.
+    if (messageStreaming === false) {
+      setOpen(false)
+      return
+    }
     if (call.status === 'completed' || call.status === 'errored') {
       setOpen(true)
     }
-  }, [call.status])
+  }, [call.status, messageStreaming])
 
   const phase = phaseFor(call)
   const hasArgs = call.args !== undefined && call.args !== null && call.args !== ''
