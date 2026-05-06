@@ -6,21 +6,64 @@
 #   source wk-assume-role.sh <ACCOUNT_NUMBER> [ROLE_TYPE]
 #
 # Arguments:
-#   ACCOUNT_NUMBER  - 12-digit AWS account ID (e.g., 913524925851)
+#   ACCOUNT_NUMBER  - 12-digit AWS account ID (e.g., 123456789012)
 #   ROLE_TYPE       - Optional: Operations (default), Admin, Read, Billing, DNS, Architect
 #
 # Examples:
-#   source wk-assume-role.sh 913524925851                  # Assumes Operations role
-#   source wk-assume-role.sh 913524925851 Admin            # Assumes Admin role
-#   source wk-assume-role.sh 913524925851 Read             # Assumes Read-only role
+#   source wk-assume-role.sh 123456789012                  # Assumes Operations role
+#   source wk-assume-role.sh 123456789012 Admin            # Assumes Admin role
+#   source wk-assume-role.sh 123456789012 Read             # Assumes Read-only role
 #
 # After sourcing, AWS CLI commands will use the assumed role credentials.
 # ============================================================================
 
 set -euo pipefail
 
+# --- Step 0: Ensure AWS CLI v2 is installed -------------------------------
+# Idempotent: no-op when `aws` is already on PATH. Full install matrix in
+# references/install-aws-cli.md. Designed to be safe to re-source.
+if ! command -v aws >/dev/null 2>&1; then
+    echo "[wk-aws] AWS CLI not found — installing..."
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        if command -v brew >/dev/null 2>&1; then
+            brew install awscli
+        else
+            curl -fsSL "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o /tmp/AWSCLIV2.pkg
+            sudo installer -pkg /tmp/AWSCLIV2.pkg -target /
+            rm -f /tmp/AWSCLIV2.pkg
+        fi
+    elif [[ -f /etc/debian_version ]]; then
+        sudo apt-get update -qq && sudo apt-get install -y -qq curl unzip
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+        unzip -q -o /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install --update
+        rm -rf /tmp/aws /tmp/awscliv2.zip
+    elif [[ -f /etc/redhat-release || -f /etc/system-release ]]; then
+        sudo yum install -y -q unzip curl
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+        unzip -q -o /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install --update
+        rm -rf /tmp/aws /tmp/awscliv2.zip
+    else
+        echo "ERROR: unsupported OS — see references/install-aws-cli.md"
+        return 1 2>/dev/null || exit 1
+    fi
+fi
+
+# --- Step 0.5: Resolve master credentials ---------------------------------
+# Prefer env vars (Hive Secret Store path). Fall back to ~/.aws/credentials
+# [WK-PROFILE]. Bail loudly when neither is available.
+if [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+    echo "[wk-aws] using credentials from environment"
+elif [[ -f "$HOME/.aws/credentials" ]] && grep -q '^\[WK-PROFILE\]' "$HOME/.aws/credentials" 2>/dev/null; then
+    export AWS_PROFILE=WK-PROFILE
+    echo "[wk-aws] using legacy WK-PROFILE from ~/.aws/credentials"
+else
+    echo "ERROR: no AWS master credentials available."
+    echo "  Set aws.access_key_id and aws.secret_access_key in the Hive Secret Store,"
+    echo "  or create ~/.aws/credentials with a [WK-PROFILE] section."
+    return 1 2>/dev/null || exit 1
+fi
+
 # --- Configuration ---
-WK_PROFILE="WK-PROFILE"
 WK_REGION="us-east-1"
 FEDROLES_TABLE="WK-FedRoles"
 SESSION_NAME="wk-session"
@@ -52,7 +95,6 @@ echo "Looking up WKFedRoles-${ROLE_TYPE} for account ${ACCOUNT_NUMBER}..."
 ROLE_ARN=$(aws dynamodb get-item \
     --table-name "$FEDROLES_TABLE" \
     --key "{\"AccountFedRole\": {\"S\": \"${ACCOUNT_NUMBER}-WKFedRoles-${ROLE_TYPE}\"}}" \
-    --profile "$WK_PROFILE" \
     --region "$WK_REGION" \
     --query 'Item.ARN.S' \
     --output text 2>/dev/null)
@@ -65,7 +107,6 @@ if [[ -z "$ROLE_ARN" || "$ROLE_ARN" == "None" ]]; then
         --table-name "$FEDROLES_TABLE" \
         --filter-expression "AccountNumber = :acct" \
         --expression-attribute-values "{\":acct\": {\"S\": \"${ACCOUNT_NUMBER}\"}}" \
-        --profile "$WK_PROFILE" \
         --region "$WK_REGION" \
         --query 'Items[].AccountFedRole.S' \
         --output text 2>/dev/null || echo "  (could not retrieve roles)"
@@ -80,7 +121,6 @@ echo "Assuming role..."
 CREDS=$(aws sts assume-role \
     --role-arn "$ROLE_ARN" \
     --role-session-name "$SESSION_NAME" \
-    --profile "$WK_PROFILE" \
     --output json 2>&1)
 
 if [[ $? -ne 0 ]]; then

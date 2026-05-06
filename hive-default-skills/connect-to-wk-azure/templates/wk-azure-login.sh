@@ -17,20 +17,56 @@
 
 set -euo pipefail
 
-# --- Configuration ---
-ENV_FILE="$HOME/.azure/.env"
-
-# --- Load credentials from .env ---
-if [[ ! -f "$ENV_FILE" ]]; then
-    echo "ERROR: Credentials file not found at $ENV_FILE"
-    return 1 2>/dev/null || exit 1
+# --- Step 0: Ensure Azure CLI is installed --------------------------------
+# Idempotent: no-op when `az` is already on PATH. Full install matrix in
+# references/install-azure-cli.md. Designed to be safe to re-source.
+if ! command -v az >/dev/null 2>&1; then
+    echo "[wk-azure] Azure CLI not found — installing..."
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        if command -v brew >/dev/null 2>&1; then
+            brew update && brew install azure-cli
+        else
+            echo "ERROR: Homebrew not found on macOS — install brew, then re-run."
+            return 1 2>/dev/null || exit 1
+        fi
+    elif [[ -f /etc/debian_version ]]; then
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+    elif [[ -f /etc/redhat-release || -f /etc/system-release ]]; then
+        sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+        if command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm
+            sudo dnf install -y azure-cli
+        else
+            sudo yum install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm
+            sudo yum install -y azure-cli
+        fi
+    else
+        echo "ERROR: unsupported OS — see references/install-azure-cli.md"
+        return 1 2>/dev/null || exit 1
+    fi
 fi
 
-source "$ENV_FILE"
+# --- Step 0.5: Resolve service principal credentials ----------------------
+# Prefer env vars (Hive Secret Store path). Fall back to ~/.azure/.env.
+# Bail loudly when neither is available.
+ENV_FILE="$HOME/.azure/.env"
 
-if [[ -z "${ARM_CLIENT_ID:-}" || -z "${ARM_CLIENT_SECRET:-}" || -z "${ARM_TENANT_ID:-}" ]]; then
-    echo "ERROR: Missing required variables in $ENV_FILE"
-    echo "Required: ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID"
+if [[ -n "${ARM_CLIENT_ID:-}" && -n "${ARM_CLIENT_SECRET:-}" && -n "${ARM_TENANT_ID:-}" ]]; then
+    echo "[wk-azure] using credentials from environment"
+elif [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+    if [[ -z "${ARM_CLIENT_ID:-}" || -z "${ARM_CLIENT_SECRET:-}" || -z "${ARM_TENANT_ID:-}" ]]; then
+        echo "ERROR: $ENV_FILE missing required ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID"
+        return 1 2>/dev/null || exit 1
+    fi
+    echo "[wk-azure] using legacy credentials from $ENV_FILE"
+else
+    echo "ERROR: no Azure service principal credentials available."
+    echo "  Set azure.client_id, azure.client_secret, azure.tenant_id in the Hive Secret Store,"
+    echo "  or create $ENV_FILE with ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID."
     return 1 2>/dev/null || exit 1
 fi
 
