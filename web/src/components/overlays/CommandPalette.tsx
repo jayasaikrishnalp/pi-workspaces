@@ -18,11 +18,14 @@ const SCREEN_ITEMS: Array<{ id: ScreenId; label: string }> = [
   { id: 'skills',    label: 'Skills' },
   { id: 'souls',     label: 'Souls' },
   { id: 'memory',    label: 'Memory' },
+  { id: 'workflows', label: 'Workflows' },
   { id: 'jobs',      label: 'Jobs' },
   { id: 'tasks',     label: 'Tasks' },
+  { id: 'teams',     label: 'Teams' },
   { id: 'terminal',  label: 'Terminal' },
   { id: 'mcp',       label: 'MCP' },
   { id: 'confluence',label: 'Confluence' },
+  { id: 'sessions',  label: 'Sessions' },
 ]
 
 export function CommandPalette({ open, onClose, onPick }: Props): JSX.Element | null {

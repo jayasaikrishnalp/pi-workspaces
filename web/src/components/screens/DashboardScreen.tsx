@@ -1,5 +1,8 @@
 import { useApi } from '../../hooks/useApi'
 import { listJobs, listTasks, probe, type Job, type Task } from '../../lib/api'
+import type { ScreenId } from '../Sidebar'
+
+interface Props { onPick?: (id: ScreenId) => void }
 
 interface StatCardProps {
   label: string
@@ -38,7 +41,7 @@ function TaskRow({ task }: { task: Task }): JSX.Element {
   )
 }
 
-export function DashboardScreen(): JSX.Element {
+export function DashboardScreen({ onPick }: Props = {}): JSX.Element {
   const probeState = useApi('dashboard.probe', probe)
   const jobsState = useApi('dashboard.jobs', () => listJobs({ limit: 5 }))
   const tasksState = useApi('dashboard.tasks', () => listTasks({ limit: 5 }))
@@ -63,6 +66,12 @@ export function DashboardScreen(): JSX.Element {
           <div className="dash-sub">
             {p ? (p.pi.ok ? `pi ${p.pi.version ?? ''}` : 'pi offline') : 'probing…'}
             {p?.pi.activeModel ? ` · ${p.pi.activeModel}` : ''}
+          </div>
+          <div className="dash-quick-actions" data-testid="dash-quick-actions">
+            <button className="btn btn-primary" onClick={() => onPick?.('chat')} data-testid="dash-action-chat">NEW CHAT →</button>
+            <button className="btn btn-secondary" onClick={() => onPick?.('terminal')} data-testid="dash-action-terminal">TERMINAL →</button>
+            <button className="btn btn-secondary" onClick={() => onPick?.('skills')} data-testid="dash-action-skills">SKILLS →</button>
+            <button className="btn btn-ghost" onClick={() => onPick?.('graph')} data-testid="dash-action-graph">GRAPH →</button>
           </div>
         </div>
         {p?.mcp ? (

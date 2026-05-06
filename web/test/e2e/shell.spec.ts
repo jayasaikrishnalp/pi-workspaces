@@ -30,16 +30,16 @@ test('shell: sidebar starts expanded and collapses on click', async ({ page, sta
 
 test('shell: clicking a sidebar item swaps the active screen', async ({ page, state }) => {
   await loginAndVisit(page, state)
-  // 'sessions' stays a placeholder through every phase.
+  // Sessions wires to a real SessionsScreen after the polish pass.
   await page.getByTestId('sb-item-sessions').click()
-  await expect(page.getByTestId('screen-sessions')).toBeVisible()
+  await expect(page.getByTestId('sessions')).toBeVisible()
   await expect(page.locator('[data-testid=workspace-shell]')).toHaveAttribute('data-active', 'sessions')
 })
 
 test('shell: PREVIEW screens render the badge', async ({ page, state }) => {
   await loginAndVisit(page, state)
-  await page.getByTestId('sb-item-swarm').click()
-  await expect(page.getByTestId('screen-swarm-preview')).toContainText('PREVIEW')
+  await page.getByTestId('sb-item-teams').click()
+  await expect(page.getByTestId('screen-teams-preview')).toContainText('PREVIEW')
 })
 
 test('probe banner: reflects /api/probe data', async ({ page, state }) => {

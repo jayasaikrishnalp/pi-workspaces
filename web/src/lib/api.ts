@@ -180,6 +180,26 @@ export const createSoul = (input: SoulInput) => api.post<{ name: string; path: s
 export const updateSoul = (name: string, patch: Partial<SoulInput>) =>
   api.put<{ name: string; path: string }>(`/api/souls/${encodeURIComponent(name)}`, patch)
 
+/* ===== Workflows CRUD ===== */
+
+export interface WorkflowStep { kind: 'skill' | 'workflow'; ref: string }
+export interface WorkflowSummary { name: string; description?: string; steps: WorkflowStep[] }
+export interface WorkflowInput { name: string; description?: string; steps: WorkflowStep[] }
+
+export const listWorkflows = () => api.get<{ workflows: WorkflowSummary[] }>('/api/workflows')
+export const getWorkflow = (name: string) =>
+  api.get<{ name: string; frontmatter: Record<string, unknown>; body: string; path: string }>(`/api/workflows/${encodeURIComponent(name)}`)
+export const createWorkflow = (input: WorkflowInput) =>
+  api.post<{ name: string; path: string }>('/api/workflows', input)
+export const updateWorkflow = (name: string, patch: Partial<WorkflowInput>) =>
+  api.put<{ name: string; path: string }>(`/api/workflows/${encodeURIComponent(name)}`, patch)
+
+/* ===== Sessions ===== */
+
+export interface SessionInfo { sessionKey: string; createdAt: number }
+export const listSessions = () => api.get<{ sessions: SessionInfo[] }>('/api/sessions')
+export const createSession = () => api.post<{ sessionKey: string }>('/api/sessions')
+
 /* ===== Memory CRUD ===== */
 
 export interface MemoryEntry { name: string; size: number; mtime: number }

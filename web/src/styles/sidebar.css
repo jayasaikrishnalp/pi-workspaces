@@ -1608,3 +1608,82 @@
 .toast-error { border-left: 3px solid var(--red); }
 .toast-title { font-weight: 700; font-size: 13px; }
 .toast-msg { font-size: 12px; color: var(--text-secondary); margin-top: 2px; font-family: var(--font-mono); }
+
+/* =========================================================
+   COST FOOTER + LIGHT MODE + DASHBOARD ACTIONS (polish pass)
+   ========================================================= */
+.cost-strip {
+  display: inline-flex; align-items: center; gap: 12px;
+  padding-left: 14px; margin-left: 6px;
+  border-left: 1px solid rgba(255,255,255,0.18);
+}
+.cost-label { font-weight: 700; letter-spacing: 0.06em; }
+.cost-sep { opacity: 0.5; }
+.cost-pair { display: inline-flex; align-items: center; gap: 4px; }
+.cost-key { opacity: 0.65; }
+.cost-val { font-weight: 700; }
+
+.dash-quick-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+
+/* =========================================================
+   VIBE: LIGHT MODE
+   Inverts the surface palette (paper-style) while keeping
+   accent + semantic colors intact. Triggered by body.vibe-light.
+   ========================================================= */
+.vibe-light {
+  --bg-primary:      #f5f6f8;
+  --bg-secondary:    #ffffff;
+  --bg-card:         #ffffff;
+  --bg-card-hover:   #eef0f4;
+  --bg-glass:        rgba(255, 255, 255, 0.85);
+  --border:          #d8dde3;
+  --border-active:   #1dacfe;
+  --border-accent:   rgba(29, 172, 254, 0.30);
+  --text-primary:    #0f1115;
+  --text-secondary:  #555c69;
+}
+.vibe-light .bg-glow {
+  background:
+    radial-gradient(circle at 12% -2%, rgba(29,172,254,0.08), transparent 36%),
+    radial-gradient(circle at 85% 12%, rgba(39,221,243,0.06), transparent 34%),
+    linear-gradient(160deg, #f7f9fc 0%, #ffffff 48%, #f3f5f8 100%);
+}
+.vibe-light .bg-grid {
+  background-image:
+    linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+}
+.vibe-light .titlebar {
+  background: rgba(255,255,255,0.95);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.vibe-light .activity-bar { background: rgba(245, 246, 248, 0.8); }
+.vibe-light .tab-strip   { background: rgba(245, 246, 248, 0.85); }
+.vibe-light .statusbar {
+  background: linear-gradient(90deg, rgba(8,139,208,0.92), rgba(12,125,187,0.92));
+  color: rgba(255,255,255,0.95);
+}
+.vibe-light .composer { background: rgba(255,255,255,0.85); }
+.vibe-light .chat-msg { background: #f3f5f8; }
+.vibe-light .chat-msg.role-user { background: rgba(29, 172, 254, 0.10); }
+.vibe-light .kb-list-row { background: #f3f5f8; }
+.vibe-light .kb-list-row.active { background: rgba(29,172,254,0.14); }
+.vibe-light .kanban-col { background: #ffffff; }
+.vibe-light .kanban-card { background: #f3f5f8; }
+.vibe-light .dash-card { background: #ffffff; }
+.vibe-light .toast { background: #ffffff; }
+.vibe-light .terminal-form { background: rgba(255,255,255,0.9); }
+.vibe-light .terminal-output { background: #ffffff; }
+.vibe-light .login-shell { background: #f5f6f8; }
+.vibe-light .login-card { background: #ffffff; box-shadow: 0 14px 30px -24px rgba(0,0,0,0.18); }
+.vibe-light .sidebar { background: rgba(255,255,255,0.92); border-right: 1px solid var(--border); }
+.vibe-light .probe-banner { background: rgba(255,255,255,0.65); }
+
+.sb-session-empty {
+  padding: 6px 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-style: italic;
+}

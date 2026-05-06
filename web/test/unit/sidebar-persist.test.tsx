@@ -63,20 +63,22 @@ describe('screen selection', () => {
   it('persists active screen on click', async () => {
     render(<App />)
     await flushAsync()
-    // 'sessions' falls through to the placeholder screen on every phase.
+    // Sessions now wires to a real SessionsScreen (testid 'sessions') after
+    // the polish pass; clicking it persists the route.
     fireEvent.click(screen.getByTestId('sb-item-sessions'))
     await flushAsync()
     expect(localStorage.getItem('hive.activeScreen')).toBe('sessions')
-    expect(screen.getByTestId('screen-sessions')).toBeInTheDocument()
+    expect(screen.getByTestId('sessions')).toBeInTheDocument()
   })
 
   it('preview screens render the PREVIEW badge', async () => {
     render(<App />)
     await flushAsync()
-    fireEvent.click(screen.getByTestId('sb-item-swarm'))
+    fireEvent.click(screen.getByTestId('sb-item-teams'))
     await flushAsync()
-    // After phase 8 the swarm screen renders its real PreviewShell with the
-    // badge — testid is `screen-swarm-preview`.
-    expect(screen.getByTestId('screen-swarm-preview')).toHaveTextContent('PREVIEW')
+    // Teams (renamed from Swarm) is the only PREVIEW screen now. Files +
+    // Operations were dropped, Conductor was renamed to Workflows and
+    // wired to the real /api/workflows backend.
+    expect(screen.getByTestId('screen-teams-preview')).toHaveTextContent('PREVIEW')
   })
 })

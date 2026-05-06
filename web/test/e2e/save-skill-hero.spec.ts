@@ -31,7 +31,9 @@ test.describe('Phase 8 — hero + previews + vibes', () => {
 
   test('PREVIEW screens render with PREVIEW badge', async ({ page, state }) => {
     await loginAndVisit(page, state)
-    for (const id of ['swarm', 'conductor', 'operations', 'files']) {
+    // Teams is the only PREVIEW screen left — Files + Operations were
+    // dropped per the post-codex polish pass; Conductor → Workflows (real).
+    for (const id of ['teams']) {
       await page.getByTestId(`sb-item-${id}`).click()
       await expect(page.locator('[data-testid^="screen-"][data-testid$="-preview"]')).toBeVisible()
       await expect(page.locator('.preview-badge')).toBeVisible()

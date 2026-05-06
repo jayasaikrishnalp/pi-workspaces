@@ -16,7 +16,9 @@ import { TasksScreen } from './components/screens/TasksScreen'
 import { TerminalScreen } from './components/screens/TerminalScreen'
 import { McpScreen } from './components/screens/McpScreen'
 import { ConfluenceScreen } from './components/screens/ConfluenceScreen'
-import { SwarmScreen, ConductorScreen, OperationsScreen, FilesScreen } from './components/screens/PreviewScreens'
+import { TeamsScreen } from './components/screens/PreviewScreens'
+import { WorkflowsScreen } from './components/screens/WorkflowsScreen'
+import { SessionsScreen } from './components/screens/SessionsScreen'
 import { Settings } from './components/overlays/Settings'
 import { CommandPalette } from './components/overlays/CommandPalette'
 import { Shortcuts } from './components/overlays/Shortcuts'
@@ -24,9 +26,9 @@ import { SaveSkillModal } from './components/overlays/SaveSkillModal'
 import { ToastStack, type Toast } from './components/overlays/ToastStack'
 import { Login } from './components/Login'
 import { useApi } from './hooks/useApi'
-import { probe } from './lib/api'
+import { probe, listSessions } from './lib/api'
 
-const PREVIEW_SCREENS: ReadonlySet<ScreenId> = new Set(['files', 'conductor', 'ops', 'swarm'])
+const PREVIEW_SCREENS: ReadonlySet<ScreenId> = new Set(['teams'])
 
 const STORAGE = {
   active: 'hive.activeScreen',
@@ -36,25 +38,35 @@ const STORAGE = {
 
 function loadActive(): ScreenId {
   const v = localStorage.getItem(STORAGE.active)
-  return (v as ScreenId) ?? 'dashboard'
+  // Migrate dropped/renamed screens to their replacements.
+  const migrated: Record<string, ScreenId> = { files: 'dashboard', ops: 'dashboard', conductor: 'workflows', swarm: 'teams' }
+  if (v && migrated[v]) return migrated[v]!
+  return (v as ScreenId | null) ?? 'dashboard'
 }
 function loadCollapsed(): boolean { return localStorage.getItem(STORAGE.collapsed) === '1' }
 function loadVibe(): string { return localStorage.getItem(STORAGE.vibe) ?? 'default' }
+
+function shortAgo(ts: number): string {
+  const d = Date.now() - ts
+  if (d < 60_000) return 'just now'
+  if (d < 3_600_000) return `${Math.floor(d / 60_000)}m`
+  if (d < 86_400_000) return `${Math.floor(d / 3_600_000)}h`
+  return `${Math.floor(d / 86_400_000)}d`
+}
 
 export function App(): JSX.Element {
   const [active, setActive] = useState<ScreenId>(loadActive)
   const [collapsed, setCollapsed] = useState<boolean>(loadCollapsed)
   const [vibe, setVibe] = useState<string>(loadVibe)
   const probeState = useApi('probe', probe)
+  const sessionsState = useApi('app.sessions', listSessions)
 
-  // Overlay state
   const [cmdkOpen, setCmdkOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [saveSkillOpen, setSaveSkillOpen] = useState(false)
   const [saveSkillBody, setSaveSkillBody] = useState('')
 
-  // Toasts
   const [toasts, setToasts] = useState<Toast[]>([])
   const pushToast = useCallback((t: Omit<Toast, 'id'>) => {
     const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -62,22 +74,22 @@ export function App(): JSX.Element {
   }, [])
   const dismissToast = useCallback((id: string) => setToasts((arr) => arr.filter((x) => x.id !== id)), [])
 
-  // Apply vibe class to body.
   useEffect(() => {
     document.body.className = vibe === 'default' ? '' : `vibe-${vibe}`
     localStorage.setItem(STORAGE.vibe, vibe)
   }, [vibe])
 
-  // Persist screen + sidebar state.
   useEffect(() => { localStorage.setItem(STORAGE.active, active) }, [active])
   useEffect(() => { localStorage.setItem(STORAGE.collapsed, collapsed ? '1' : '0') }, [collapsed])
 
-  // Global hotkeys.
+  const toggleTheme = useCallback(() => {
+    setVibe((v) => (v === 'light' ? 'default' : 'light'))
+  }, [])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       const inField = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
-
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmdkOpen((v) => !v) }
       else if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); setSettingsOpen(true) }
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); setCollapsed((v) => !v) }
@@ -97,6 +109,13 @@ export function App(): JSX.Element {
   const isPreview = PREVIEW_SCREENS.has(active)
   const skillsCount = probeState.data?.skills.count
   const tasksCount = probeState.data?.tasks?.count
+  const workflowsCount = probeState.data?.workflows?.count
+
+  const recentSessions = (sessionsState.data?.sessions ?? [])
+    .slice()
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 5)
+    .map((s) => ({ id: s.sessionKey, title: s.sessionKey.slice(0, 8), ago: shortAgo(s.createdAt) }))
 
   return (
     <div
@@ -112,7 +131,11 @@ export function App(): JSX.Element {
         setCollapsed={setCollapsed}
         skillCount={skillsCount}
         taskCount={tasksCount}
+        workflowsCount={workflowsCount}
+        recentSessions={recentSessions}
         onCommandPalette={() => setCmdkOpen(true)}
+        onSettings={() => setSettingsOpen(true)}
+        onThemeToggle={toggleTheme}
       />
       <Titlebar
         crumbs={['hive', 'vm-prod-43', titleFor(active)]}
@@ -123,7 +146,7 @@ export function App(): JSX.Element {
       <div className="main-area">
         <ProbeBanner probe={probeState.data} loading={probeState.loading} />
         <div className="main-content">
-          {active === 'dashboard' ? <DashboardScreen />
+          {active === 'dashboard' ? <DashboardScreen onPick={setActive} />
             : active === 'chat'      ? <ChatScreen onSaveSkill={(body) => { setSaveSkillBody(body); setSaveSkillOpen(true) }} />
             : active === 'graph'     ? <GraphScreen />
             : active === 'skills'    ? <SkillsScreen />
@@ -134,10 +157,9 @@ export function App(): JSX.Element {
             : active === 'terminal'  ? <TerminalScreen />
             : active === 'mcp'       ? <McpScreen />
             : active === 'confluence'? <ConfluenceScreen />
-            : active === 'swarm'     ? <SwarmScreen />
-            : active === 'conductor' ? <ConductorScreen />
-            : active === 'ops'       ? <OperationsScreen />
-            : active === 'files'     ? <FilesScreen />
+            : active === 'workflows' ? <WorkflowsScreen />
+            : active === 'teams'     ? <TeamsScreen />
+            : active === 'sessions'  ? <SessionsScreen onPick={setActive} />
             : <PlaceholderScreen id={active} preview={isPreview} />}
         </div>
       </div>
@@ -163,8 +185,8 @@ export function App(): JSX.Element {
 
 function titleFor(id: ScreenId): string {
   const m: Record<ScreenId, string> = {
-    dashboard: 'dashboard', chat: 'chat', files: 'files', terminal: 'terminal',
-    jobs: 'jobs', tasks: 'tasks', conductor: 'conductor', ops: 'operations', swarm: 'swarm',
+    dashboard: 'dashboard', chat: 'chat', terminal: 'terminal',
+    jobs: 'jobs', tasks: 'tasks', workflows: 'workflows', teams: 'teams',
     graph: 'knowledge.graph', memory: 'memory', skills: 'skills', confluence: 'confluence',
     mcp: 'mcp', souls: 'souls', sessions: 'sessions',
   }

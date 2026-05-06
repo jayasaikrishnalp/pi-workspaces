@@ -2,8 +2,8 @@ import { useState, type ReactNode } from 'react'
 import { Icons, Logo } from './icons/Icons'
 
 export type ScreenId =
-  | 'dashboard' | 'chat' | 'files' | 'terminal' | 'jobs' | 'tasks'
-  | 'conductor' | 'ops' | 'swarm'
+  | 'dashboard' | 'chat' | 'terminal' | 'jobs' | 'tasks'
+  | 'workflows' | 'teams'
   | 'graph' | 'memory' | 'skills' | 'confluence' | 'mcp' | 'souls'
   | 'sessions'
 
@@ -14,9 +14,12 @@ interface Props {
   setCollapsed: (v: boolean) => void
   skillCount?: number
   taskCount?: number
-  swarmCount?: number
+  teamsCount?: number
+  workflowsCount?: number
   recentSessions?: Array<{ id: string; title: string; ago: string }>
   onCommandPalette?: () => void
+  onSettings?: () => void
+  onThemeToggle?: () => void
 }
 
 interface SidebarItemProps {
@@ -64,7 +67,7 @@ function SidebarGroup({ label, defaultOpen = true, children }: SidebarGroupProps
 }
 
 export function Sidebar(props: Props): JSX.Element {
-  const { active, onPick, collapsed, setCollapsed, skillCount, taskCount, swarmCount, recentSessions = [], onCommandPalette } = props
+  const { active, onPick, collapsed, setCollapsed, skillCount, taskCount, teamsCount, workflowsCount, recentSessions = [], onCommandPalette } = props
 
   if (collapsed) {
     return (
@@ -75,12 +78,12 @@ export function Sidebar(props: Props): JSX.Element {
         {([
           { id: 'dashboard', icon: <Icons.dashboard size={16} /> },
           { id: 'chat', icon: <Icons.chat size={16} /> },
-          { id: 'swarm', icon: <Icons.swarm size={16} /> },
+          { id: 'teams', icon: <Icons.swarm size={16} /> },
           { id: 'graph', icon: <Icons.graph size={16} /> },
           { id: 'terminal', icon: <Icons.terminal size={16} /> },
-          { id: 'files', icon: <Icons.files size={16} /> },
+          { id: 'workflows', icon: <Icons.conductor size={16} /> },
           { id: 'tasks', icon: <Icons.tasks size={16} /> },
-          { id: 'ops', icon: <Icons.ops size={16} /> },
+          { id: 'jobs', icon: <Icons.jobs size={16} /> },
         ] as const).map((t) => (
           <button
             key={t.id}
@@ -120,7 +123,6 @@ export function Sidebar(props: Props): JSX.Element {
       <SidebarGroup label="MAIN">
         <SidebarItem icon={<Icons.dashboard size={14} />} label="Dashboard" active={active === 'dashboard'} onClick={() => onPick('dashboard')} />
         <SidebarItem icon={<Icons.chat size={14} />} label="Chat" active={active === 'chat'} onClick={() => onPick('chat')} />
-        <SidebarItem icon={<Icons.files size={14} />} label="Files" active={active === 'files'} onClick={() => onPick('files')} />
         <SidebarItem icon={<Icons.terminal size={14} />} label="Terminal" active={active === 'terminal'} onClick={() => onPick('terminal')} />
         <SidebarItem icon={<Icons.jobs size={14} />} label="Jobs" active={active === 'jobs'} onClick={() => onPick('jobs')} />
         <SidebarItem
@@ -130,14 +132,19 @@ export function Sidebar(props: Props): JSX.Element {
           onClick={() => onPick('tasks')}
           badge={taskCount ? <span className="sb-num">{taskCount}</span> : null}
         />
-        <SidebarItem icon={<Icons.conductor size={14} />} label="Conductor" active={active === 'conductor'} onClick={() => onPick('conductor')} />
-        <SidebarItem icon={<Icons.ops size={14} />} label="Operations" active={active === 'ops'} onClick={() => onPick('ops')} />
+        <SidebarItem
+          icon={<Icons.conductor size={14} />}
+          label="Workflows"
+          active={active === 'workflows'}
+          onClick={() => onPick('workflows')}
+          badge={workflowsCount ? <span className="sb-num">{workflowsCount}</span> : null}
+        />
         <SidebarItem
           icon={<Icons.swarm size={14} />}
-          label="Swarm"
-          active={active === 'swarm'}
-          onClick={() => onPick('swarm')}
-          badge={swarmCount ? <span className="sb-num">{swarmCount}</span> : null}
+          label="Teams"
+          active={active === 'teams'}
+          onClick={() => onPick('teams')}
+          badge={teamsCount ? <span className="sb-num">{teamsCount}</span> : null}
         />
       </SidebarGroup>
 
@@ -157,8 +164,10 @@ export function Sidebar(props: Props): JSX.Element {
       </SidebarGroup>
 
       <SidebarGroup label="SESSIONS">
-        {recentSessions.slice(0, 5).map((s) => (
-          <button key={s.id} className="sb-session" onClick={() => onPick('chat')}>
+        {recentSessions.length === 0 ? (
+          <div className="sb-session-empty">no sessions yet</div>
+        ) : recentSessions.slice(0, 5).map((s) => (
+          <button key={s.id} className="sb-session" onClick={() => onPick('sessions')} data-testid={`sb-session-${s.id.slice(-6)}`}>
             <span className="sb-session-dot" />
             <span className="sb-session-text">{s.title}</span>
             <span className="sb-session-ago">{s.ago}</span>
@@ -176,8 +185,8 @@ export function Sidebar(props: Props): JSX.Element {
           <span className="sb-status-dot" />
         </button>
         <div className="sb-footer-actions">
-          <button className="sb-iconbtn" title="Settings"><Icons.settings size={12} /></button>
-          <button className="sb-iconbtn" title="Theme"><Icons.spark size={12} /></button>
+          <button className="sb-iconbtn" title="Settings" onClick={() => props.onSettings?.()} data-testid="sb-settings"><Icons.settings size={12} /></button>
+          <button className="sb-iconbtn" title="Toggle light/dark" onClick={() => props.onThemeToggle?.()} data-testid="sb-theme-toggle"><Icons.spark size={12} /></button>
         </div>
       </div>
     </div>
