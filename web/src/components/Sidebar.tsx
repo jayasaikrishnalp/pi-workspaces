@@ -5,6 +5,7 @@ export type ScreenId =
   | 'dashboard' | 'chat' | 'terminal' | 'jobs' | 'tasks'
   | 'workflows' | 'teams'
   | 'graph' | 'memory' | 'skills' | 'confluence' | 'mcp' | 'souls'
+  | 'secrets'
   | 'sessions'
 
 interface Props {
@@ -158,6 +159,7 @@ export function Sidebar(props: Props): JSX.Element {
         <SidebarItem icon={<Icons.book size={14} />} label="Skills" active={active === 'skills'} onClick={() => onPick('skills')} />
         <SidebarItem icon={<Icons.search size={14} />} label="Confluence" active={active === 'confluence'} onClick={() => onPick('confluence')} />
         <SidebarItem icon={<Icons.mcp size={14} />} label="MCP" active={active === 'mcp'} onClick={() => onPick('mcp')} />
+        <SidebarItem icon={<span style={{fontSize:14}}>🔑</span>} label="Secrets" active={active === 'secrets'} onClick={() => onPick('secrets')} />
         <SidebarItem icon={<Icons.profiles size={14} />} label="Souls" active={active === 'souls'} onClick={() => onPick('souls')} />
       </SidebarGroup>
 

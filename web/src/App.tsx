@@ -15,6 +15,7 @@ import { JobsScreen } from './components/screens/JobsScreen'
 import { TasksScreen } from './components/screens/TasksScreen'
 import { TerminalScreen } from './components/screens/TerminalScreen'
 import { McpScreen } from './components/screens/McpScreen'
+import { SecretsScreen } from './components/screens/SecretsScreen'
 import { ConfluenceScreen } from './components/screens/ConfluenceScreen'
 import { TeamsScreen } from './components/screens/PreviewScreens'
 import { WorkflowsScreen } from './components/screens/WorkflowsScreen'
@@ -156,6 +157,7 @@ export function App(): JSX.Element {
             : active === 'tasks'     ? <TasksScreen />
             : active === 'terminal'  ? <TerminalScreen />
             : active === 'mcp'       ? <McpScreen />
+            : active === 'secrets'   ? <SecretsScreen />
             : active === 'confluence'? <ConfluenceScreen />
             : active === 'workflows' ? <WorkflowsScreen />
             : active === 'teams'     ? <TeamsScreen />
@@ -188,7 +190,7 @@ function titleFor(id: ScreenId): string {
     dashboard: 'dashboard', chat: 'chat', terminal: 'terminal',
     jobs: 'jobs', tasks: 'tasks', workflows: 'workflows', teams: 'teams',
     graph: 'knowledge.graph', memory: 'memory', skills: 'skills', confluence: 'confluence',
-    mcp: 'mcp', souls: 'souls', sessions: 'sessions',
+    mcp: 'mcp', secrets: 'secrets', souls: 'souls', sessions: 'sessions',
   }
   return m[id]
 }

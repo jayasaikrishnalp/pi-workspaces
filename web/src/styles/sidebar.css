@@ -2226,3 +2226,42 @@
 .mix-dot.input  { background: var(--accent); }
 .mix-dot.output { background: var(--green); }
 .mix-dot.write  { background: var(--orange); }
+
+/* =========================================================
+   SECRETS SCREEN
+   ========================================================= */
+.secrets-screen { display: flex; flex-direction: column; gap: 16px; padding: 16px 20px; }
+.secrets-presets { display: flex; gap: 8px; flex-wrap: wrap; }
+.secrets-preset-form {
+  background: var(--bg-card); border: 1px solid var(--border-accent);
+  border-radius: var(--r-lg); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.secrets-preset-form h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; }
+.secrets-preset-row {
+  display: grid;
+  grid-template-columns: 180px 200px 1fr;
+  gap: 8px; align-items: center;
+}
+.secrets-preset-row label { font-size: 12px; color: var(--text-secondary); }
+.secrets-preset-key {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-secondary);
+}
+.secrets-preset-row input {
+  background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--text-primary);
+}
+.secrets-preset-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+.secrets-add { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px 16px; }
+.secrets-add h3 { margin: 0 0 8px; font-size: 14px; font-weight: 700; }
+.secrets-add-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+.secrets-add-row input {
+  background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--text-primary);
+}
+
+.secrets-list h3 { margin: 0 0 8px; font-size: 14px; font-weight: 700; }

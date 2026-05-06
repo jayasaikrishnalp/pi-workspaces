@@ -227,6 +227,14 @@ export const createSession = () => api.post<{ sessionKey: string }>('/api/sessio
 export const setSessionTitle = (sessionKey: string, title: string) =>
   api.put<{ title: string | null }>(`/api/sessions/${encodeURIComponent(sessionKey)}/title`, { title })
 
+/* ===== Secrets (Phase 2/4) ===== */
+export interface SecretEntry { key: string; updatedAt: number }
+export const listSecrets = () => api.get<{ secrets: SecretEntry[] }>('/api/secrets')
+export const putSecret = (key: string, value: string) =>
+  api.put<{ key: string; updatedAt: number }>(`/api/secrets/${encodeURIComponent(key)}`, { value })
+export const deleteSecret = (key: string) =>
+  api.delete<{ deleted: true }>(`/api/secrets/${encodeURIComponent(key)}`)
+
 /* ===== Memory CRUD ===== */
 
 export interface MemoryEntry { name: string; size: number; mtime: number }
