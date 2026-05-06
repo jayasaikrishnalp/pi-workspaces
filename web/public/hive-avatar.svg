@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" role="img" aria-label="Hive mascot">
+  <defs>
+    <!-- soft sunset sky gradient -->
+    <radialGradient id="sky" cx="50%" cy="35%" r="75%">
+      <stop offset="0%" stop-color="#7be0ff"/>
+      <stop offset="55%" stop-color="#1dacfe"/>
+      <stop offset="100%" stop-color="#0c2e5b"/>
+    </radialGradient>
+    <linearGradient id="frameStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.45"/>
+    </linearGradient>
+    <linearGradient id="glyph" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ffd6ec"/>
+    </linearGradient>
+    <radialGradient id="halftone" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.6" fill="#ffffff" fill-opacity="0.16"/>
+    </pattern>
+  </defs>
+
+  <!-- outer panel -->
+  <rect x="6" y="6" width="228" height="228" rx="18" fill="url(#sky)"/>
+  <!-- halftone overlay (anime print feel) -->
+  <rect x="6" y="6" width="228" height="228" rx="18" fill="url(#dots)" opacity="0.7"/>
+  <rect x="6" y="6" width="228" height="228" rx="18" fill="url(#halftone)"/>
+
+  <!-- sunburst action lines -->
+  <g stroke="#ffffff" stroke-opacity="0.18" stroke-linecap="round">
+    <line x1="120" y1="120" x2="120" y2="22" stroke-width="1.2"/>
+    <line x1="120" y1="120" x2="200" y2="50" stroke-width="0.8"/>
+    <line x1="120" y1="120" x2="220" y2="120" stroke-width="1.0"/>
+    <line x1="120" y1="120" x2="200" y2="190" stroke-width="0.8"/>
+    <line x1="120" y1="120" x2="120" y2="218" stroke-width="1.2"/>
+    <line x1="120" y1="120" x2="40" y2="190" stroke-width="0.8"/>
+    <line x1="120" y1="120" x2="20" y2="120" stroke-width="1.0"/>
+    <line x1="120" y1="120" x2="40" y2="50" stroke-width="0.8"/>
+  </g>
+
+  <!-- soft halo behind glyph -->
+  <circle cx="120" cy="120" r="62" fill="#ffffff" fill-opacity="0.06"/>
+  <circle cx="120" cy="120" r="46" fill="#ffffff" fill-opacity="0.10"/>
+
+  <!-- the π mascot glyph: bold serif with soft drop shadow -->
+  <g filter="drop-shadow(0 4px 6px rgba(8,12,28,0.45))">
+    <!-- horizontal bar -->
+    <rect x="68" y="92" width="104" height="14" rx="4" fill="url(#glyph)"/>
+    <!-- left leg -->
+    <path d="M 90 106 C 90 130, 86 158, 78 174 L 92 178 C 100 162, 104 134, 104 106 Z" fill="url(#glyph)"/>
+    <!-- right leg with serif curl -->
+    <path d="M 150 106 L 150 168 C 150 178, 158 182, 168 178 L 172 168 L 162 168 C 160 168, 160 165, 160 162 L 160 106 Z" fill="url(#glyph)"/>
+    <!-- top serif flourish on the bar (manga-card highlight) -->
+    <path d="M 70 92 L 78 84 L 168 84 L 174 92 Z" fill="#ffffff" fill-opacity="0.85"/>
+  </g>
+
+  <!-- sakura petals (anime accent) -->
+  <g opacity="0.85">
+    <g transform="translate(40,38) rotate(-15)">
+      <path d="M0 0 C 4 -6 12 -6 12 2 C 18 0 18 10 10 10 C 12 18 2 18 2 10 C -6 12 -6 2 0 0 Z" fill="#ffc6e3"/>
+      <circle cx="6" cy="6" r="1.4" fill="#ff6fb1"/>
+    </g>
+    <g transform="translate(196,52) rotate(35) scale(0.85)">
+      <path d="M0 0 C 4 -6 12 -6 12 2 C 18 0 18 10 10 10 C 12 18 2 18 2 10 C -6 12 -6 2 0 0 Z" fill="#ffc6e3"/>
+      <circle cx="6" cy="6" r="1.4" fill="#ff6fb1"/>
+    </g>
+    <g transform="translate(186,196) rotate(-20) scale(0.7)">
+      <path d="M0 0 C 4 -6 12 -6 12 2 C 18 0 18 10 10 10 C 12 18 2 18 2 10 C -6 12 -6 2 0 0 Z" fill="#ffc6e3"/>
+      <circle cx="6" cy="6" r="1.4" fill="#ff6fb1"/>
+    </g>
+  </g>
+
+  <!-- twinkle stars -->
+  <g fill="#ffffff">
+    <path d="M 60 60 l 1.2 3 l 3 1.2 l -3 1.2 l -1.2 3 l -1.2 -3 l -3 -1.2 l 3 -1.2 z"/>
+    <path d="M 180 160 l 1.6 4 l 4 1.6 l -4 1.6 l -1.6 4 l -1.6 -4 l -4 -1.6 l 4 -1.6 z" opacity="0.85"/>
+    <path d="M 50 180 l 0.8 2 l 2 0.8 l -2 0.8 l -0.8 2 l -0.8 -2 l -2 -0.8 l 2 -0.8 z" opacity="0.7"/>
+  </g>
+
+  <!-- corner card label -->
+  <g transform="translate(16,210)">
+    <rect x="0" y="0" width="64" height="14" rx="3" fill="#000000" fill-opacity="0.4"/>
+    <text x="6" y="10" font-family="ui-sans-serif, system-ui" font-size="9" fill="#ffffff" letter-spacing="0.18em" font-weight="700">HIVE · π</text>
+  </g>
+
+  <!-- frame border -->
+  <rect x="6" y="6" width="228" height="228" rx="18"
+        fill="none" stroke="url(#frameStroke)" stroke-width="2"/>
+  <rect x="12" y="12" width="216" height="216" rx="14"
+        fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="1"/>
+</svg>
