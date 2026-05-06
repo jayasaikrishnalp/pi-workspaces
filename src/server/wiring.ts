@@ -10,6 +10,7 @@ import { KbEventBus, getKbEventBus } from './kb-event-bus.js'
 import { KbWatcher } from './kb-watcher.js'
 import { ConfluenceClient, ALLOWED_BASE_URL } from './confluence-client.js'
 import { AuthStore, getAuthStore } from './auth-store.js'
+import { SecretStore, getSecretStore } from './secret-store.js'
 import fsSync from 'node:fs'
 
 import { McpBroker } from './mcp-broker.js'
@@ -41,6 +42,10 @@ export interface Wiring {
   confluenceConfigError?: string
   /** Per-workspace auth store. null only when test wiring opts out. */
   authStore: AuthStore | null
+  /** Per-workspace secret store (env-var bag for MCP servers + skills).
+   *  null only when test wiring opts out (the dev token / sessions tests
+   *  don't need it). */
+  secretStore: SecretStore | null
   /** Absolute path to the workspace data root (for probe + diagnostics). */
   workspaceRoot: string
   /** Spawn callback for `pi`. Override in tests; defaults to spawning `pi`. */
@@ -132,6 +137,7 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   }
 
   const authStore = getAuthStore({ workspaceRoot: root })
+  const secretStore = getSecretStore({ workspaceRoot: root })
   const spawnPi: SpawnPi = options.spawnPi ?? ((args, opts) => spawn('pi', [...args], opts ?? {}))
   const bashPath = process.env.PI_WORKSPACE_BASH_PATH ?? '/bin/bash'
   const spawnBash: SpawnPi = (args, opts) => spawn(bashPath, [...args], opts ?? {})
@@ -177,11 +183,14 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     kbRoot, skillsDir, agentsDir, workflowsDir, memoryDir,
     watcher,
     confluence, confluenceConfigured, confluenceConfigError,
-    authStore, workspaceRoot: root, spawnPi, spawnBash, mcpBroker, db,
+    authStore, secretStore, workspaceRoot: root, spawnPi, spawnBash, mcpBroker, db,
   }
   globalThis.__wiring = w
   void authStore.load().catch((err) => {
     console.error('[wiring] auth store load failed:', err)
+  })
+  void secretStore.load().catch((err) => {
+    console.error('[wiring] secret store load failed:', err)
   })
   return w
 }
@@ -193,4 +202,5 @@ export function _resetWiringForTests(): void {
   globalThis.__piRpcBridge = undefined
   globalThis.__kbEventBus = undefined
   globalThis.__authStore = undefined
+  globalThis.__secretStore = undefined
 }

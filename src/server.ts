@@ -27,6 +27,12 @@ import {
   handleSessionTitle,
 } from './routes/sessions.js'
 import { handleSendStream, SEND_STREAM_PATH } from './routes/send-stream.js'
+import {
+  handleSecretsList,
+  handleSecretsPut,
+  handleSecretsDelete,
+  SECRETS_PATTERNS,
+} from './routes/secrets.js'
 import { handleChatEvents, CHAT_EVENTS_PATH } from './routes/chat-events.js'
 import { handleRunEvents, handleRunAbort, RUNS_EVENTS_PATTERN, RUNS_ABORT_PATTERN } from './routes/runs.js'
 import { handleKbGraph, handleKbEvents, KB_GRAPH_PATH, KB_EVENTS_PATH } from './routes/kb.js'
@@ -131,6 +137,10 @@ const ROUTES: Route[] = [
   { method: 'GET', pattern: '/api/sessions/:sessionKey/active-run', handler: handleActiveRun },
   { method: 'GET', pattern: '/api/sessions/:sessionKey/messages', handler: handleSessionMessages },
   { method: 'PUT', pattern: '/api/sessions/:sessionKey/title', handler: handleSessionTitle },
+  // Secret store — credentials for MCP servers + skills
+  { method: 'GET', pattern: SECRETS_PATTERNS.list, handler: handleSecretsList },
+  { method: 'PUT', pattern: SECRETS_PATTERNS.key, handler: handleSecretsPut },
+  { method: 'DELETE', pattern: SECRETS_PATTERNS.key, handler: handleSecretsDelete },
   { method: 'POST', pattern: SEND_STREAM_PATH, handler: handleSendStream },
   { method: 'GET', pattern: CHAT_EVENTS_PATH, handler: handleChatEvents },
   { method: 'GET', pattern: RUNS_EVENTS_PATTERN, handler: handleRunEvents },
