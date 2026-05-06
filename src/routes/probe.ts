@@ -39,9 +39,14 @@ async function probePi(w: Wiring): Promise<PiResult> {
     return { ok: false, error: `spawn failed: ${(err as Error).message}` }
   }
   let stdout = ''
+  let stderr = ''
   child.stdout?.setEncoding('utf8')
   child.stderr?.setEncoding('utf8')
   child.stdout?.on('data', (d) => { stdout += String(d) })
+  // pi v0.73 writes the version banner to stderr (verified live with
+  // `pi --version 1>/tmp/out 2>/tmp/err` on the operator's machine).
+  // We accept either stream — match against the combined output.
+  child.stderr?.on('data', (d) => { stderr += String(d) })
 
   const exitPromise = new Promise<{ code: number | null }>((resolve, reject) => {
     child.once('exit', (code) => resolve({ code }))
@@ -59,9 +64,11 @@ async function probePi(w: Wiring): Promise<PiResult> {
     if (code !== 0) {
       return { ok: false, error: `pi --version exited code=${code}` }
     }
-    const m = PI_VERSION_RE.exec(stdout.trim())
+    // Try stdout first (some pi forks), fall back to stderr (v0.73 default).
+    const combined = `${stdout}\n${stderr}`.trim()
+    const m = PI_VERSION_RE.exec(combined)
     if (!m) {
-      return { ok: false, error: `unparseable output: ${stdout.slice(0, 100)}` }
+      return { ok: false, error: `unparseable output: ${combined.slice(0, 100)}` }
     }
     return { ok: true, version: m[1], latencyMs: Date.now() - t0 }
   } catch (err) {
