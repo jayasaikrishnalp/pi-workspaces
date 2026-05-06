@@ -78,6 +78,25 @@ describe('Composer', () => {
     expect(onSend).not.toHaveBeenCalled()
   })
 
+  it('does NOT render the paperclip attach stub button', () => {
+    setup()
+    // Paperclip was a non-functional stub; until file upload backend exists,
+    // we don't render it.
+    expect(screen.queryByTestId('composer-attach')).toBeNull()
+  })
+
+  it('clicking the sliders icon dispatches a Cmd+, shortcut to open Settings', () => {
+    const onSwitchModel = vi.fn()
+    render(<Composer onSend={vi.fn()} onSwitchModel={onSwitchModel} />)
+    const dispatched: KeyboardEvent[] = []
+    const listener = (e: KeyboardEvent) => dispatched.push(e)
+    window.addEventListener('keydown', listener)
+    fireEvent.click(screen.getByTestId('composer-settings'))
+    window.removeEventListener('keydown', listener)
+    const settingsKey = dispatched.find((e) => e.key === ',' && (e.metaKey || e.ctrlKey))
+    expect(settingsKey).toBeTruthy()
+  })
+
   it('shows a stop button when streaming, hides the send arrow', () => {
     const { rerender } = render(<Composer onSend={vi.fn()} />)
     expect(screen.queryByTestId('composer-stop')).toBeNull()

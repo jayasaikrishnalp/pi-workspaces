@@ -87,27 +87,28 @@ export function Composer({
         />
         <div className="composer-row">
           <div className="composer-tools">
+            {/* Paperclip removed until file-upload backend exists. */}
             <button
               type="button"
               className="composer-icon-btn"
-              title="Attach (coming soon)"
-              aria-label="Attach"
-              disabled
-              data-testid="composer-attach"
+              title="Open settings (⌘,)"
+              aria-label="Open settings"
+              onClick={() => {
+                // App.tsx listens globally for Cmd/Ctrl+, → opens Settings.
+                // Dispatching the keyboard event keeps this button decoupled
+                // from the App component without prop-drilling onSettings.
+                const ev = new KeyboardEvent('keydown', {
+                  key: ',',
+                  metaKey: true,
+                  ctrlKey: true,
+                  bubbles: true,
+                })
+                window.dispatchEvent(ev)
+                onSwitchModel?.()
+              }}
+              data-testid="composer-settings"
             >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 12.4 12.6 20.8a5.5 5.5 0 0 1-7.8-7.8L13.2 4.6a3.7 3.7 0 0 1 5.2 5.2L9.9 18.3a1.8 1.8 0 0 1-2.6-2.6l7.4-7.4"/>
-              </svg>
-            </button>
-            <button
-              type="button"
-              className="composer-icon-btn"
-              title="Switch model (⌘.)"
-              aria-label="Switch model"
-              onClick={() => onSwitchModel?.()}
-              data-testid="composer-switch-model"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="4" y1="6" x2="20" y2="6"/>
                 <circle cx="14" cy="6" r="2.2" fill="currentColor"/>
                 <line x1="4" y1="12" x2="20" y2="12"/>
