@@ -2,41 +2,41 @@
 
 ## Phase 1 — Foundation
 
-- [ ] 1.1 Delete the existing `web/` (Lit + Tailwind) — wholesale replacement.
-- [ ] 1.2 Scaffold Vite + React 18 + TypeScript at `web/`. Install deps: react, react-dom, vite, @vitejs/plugin-react, typescript, vitest, @playwright/test, @testing-library/react, @testing-library/jest-dom.
-- [ ] 1.3 Lift `tokens.css` + `shell.css` + `sidebar.css` from /tmp/cloudops-design-v2/pi-workspaces/project/assets/.
-- [ ] 1.4 Build `Sidebar.tsx`, `Titlebar.tsx`, `Statusbar.tsx`, `ProbeBanner.tsx`, `Icons.tsx`.
-- [ ] 1.5 Build `App.tsx` with active screen state + sidebar collapse + localStorage persistence + login flow (cookie-gated /api/probe + /api/auth/login).
-- [ ] 1.6 Vite proxy `/api/*` → `http://localhost:8766`.
-- [ ] 1.7 Top-level `npm run test:web` and `npm run test:web:e2e` scripts.
-- [ ] 1.8 Vitest test: sidebar reducer (collapse/expand persists to localStorage).
-- [ ] 1.9 Playwright test (`shell.spec.ts`): page loads, login works with dev token, sidebar renders + collapses, probe banner reflects /api/probe data.
-- [ ] 1.10 Phase 1 commit + push.
+- [x] 1.1 Delete the existing `web/` (Lit + Tailwind) — wholesale replacement.
+- [x] 1.2 Scaffold Vite + React 18 + TypeScript at `web/`. Install deps: react, react-dom, vite, @vitejs/plugin-react, typescript, vitest, @playwright/test, @testing-library/react, @testing-library/jest-dom.
+- [x] 1.3 Lift `tokens.css` + `shell.css` + `sidebar.css` from /tmp/cloudops-design-v2/pi-workspaces/project/assets/.
+- [x] 1.4 Build `Sidebar.tsx`, `Titlebar.tsx`, `Statusbar.tsx`, `ProbeBanner.tsx`, `Icons.tsx`.
+- [x] 1.5 Build `App.tsx` with active screen state + sidebar collapse + localStorage persistence + login flow (cookie-gated /api/probe + /api/auth/login).
+- [x] 1.6 Vite proxy `/api/*` → `http://localhost:8766`.
+- [x] 1.7 Top-level `npm run test:web` and `npm run test:web:e2e` scripts.
+- [x] 1.8 Vitest test: sidebar reducer (collapse/expand persists to localStorage).
+- [x] 1.9 Playwright test (`shell.spec.ts`): page loads, login works with dev token, sidebar renders + collapses, probe banner reflects /api/probe data.
+- [x] 1.10 Phase 1 commit + push.
 
 ## Phase 2 — Dashboard
 
-- [ ] 2.1 `DashboardScreen.tsx` with stat cards (skills/agents/souls/jobs/tasks/runs counts), recent jobs list, recent tasks list.
-- [ ] 2.2 `useProbe`, `useJobs`, `useTasks` hooks.
-- [ ] 2.3 Playwright `dashboard.spec.ts` — assert all stat cards render with the live counts.
-- [ ] 2.4 Phase 2 commit + push.
+- [x] 2.1 `DashboardScreen.tsx` with stat cards (skills/agents/souls/jobs/tasks/runs counts), recent jobs list, recent tasks list.
+- [x] 2.2 `useProbe`, `useJobs`, `useTasks` hooks.
+- [x] 2.3 Playwright `dashboard.spec.ts` — assert all stat cards render with the live counts.
+- [x] 2.4 Phase 2 commit + push.
 
 ## Phase 3 — Chat
 
-- [ ] 3.1 `ChatScreen.tsx`, `Composer.tsx`, `Message.tsx`, `ToolCard.tsx`.
-- [ ] 3.2 `useChatStream` consuming /api/chat-events + send-stream.
-- [ ] 3.3 `streamingMessage.ts` reducer + Vitest unit test.
-- [ ] 3.4 Playwright `chat.spec.ts` — Playwright intercepts /api/sessions/*/send-stream and replays canned events; asserts streaming UI.
-- [ ] 3.5 Phase 3 commit + push.
+- [x] 3.1 `ChatScreen.tsx`, `Composer.tsx`, `Message.tsx`, `ToolCard.tsx`.
+- [x] 3.2 `useChatStream` consuming /api/chat-events + send-stream.
+- [x] 3.3 `streamingMessage.ts` reducer + Vitest unit test.
+- [x] 3.4 Playwright `chat.spec.ts` — Playwright intercepts /api/sessions/*/send-stream and replays canned events; asserts streaming UI.
+- [x] 3.5 Phase 3 commit + push.
 
 ## Phase 4 — Knowledge Graph
 
-- [ ] 4.1 Lift `hexgraph.jsx` math + render approach into `HexGraph.tsx` + `hexLayout.ts`.
-- [ ] 4.2 `useKbGraph` initial GET + SSE delta merge.
-- [ ] 4.3 `SkillDetail.tsx` side rail.
-- [ ] 4.4 Souls + embodies edges rendered.
-- [ ] 4.5 Vitest unit tests for `hexLayout.ts` (axial → pixel conversions).
-- [ ] 4.6 Playwright `graph.spec.ts` — seed kb, assert nodes render, click a node, assert detail rail opens.
-- [ ] 4.7 Phase 4 commit + push.
+- [x] 4.1 Lift `hexgraph.jsx` math + render approach into `HexGraph.tsx` + `hexLayout.ts`.
+- [x] 4.2 `useKbGraph` initial GET + SSE delta merge.
+- [x] 4.3 `SkillDetail.tsx` side rail.
+- [x] 4.4 Souls + embodies edges rendered.
+- [x] 4.5 Vitest unit tests for `hexLayout.ts` (axial → pixel conversions).
+- [x] 4.6 Playwright `graph.spec.ts` — seed kb, assert nodes render, click a node, assert detail rail opens.
+- [x] 4.7 Phase 4 commit + push.
 
 ## Phase 5 — KB CRUD: Skills + Souls + Memory
 

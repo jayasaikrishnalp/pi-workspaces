@@ -7,6 +7,7 @@ import { ProbeBanner } from './components/shell/ProbeBanner'
 import { PlaceholderScreen } from './components/screens/PlaceholderScreen'
 import { DashboardScreen } from './components/screens/DashboardScreen'
 import { ChatScreen } from './components/screens/ChatScreen'
+import { GraphScreen } from './components/screens/GraphScreen'
 import { Login } from './components/Login'
 import { useApi } from './hooks/useApi'
 import { probe } from './lib/api'
@@ -77,6 +78,8 @@ export function App(): JSX.Element {
             <DashboardScreen />
           ) : active === 'chat' ? (
             <ChatScreen />
+          ) : active === 'graph' ? (
+            <GraphScreen />
           ) : (
             <PlaceholderScreen id={active} preview={isPreview} />
           )}

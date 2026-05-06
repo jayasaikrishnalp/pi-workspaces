@@ -119,6 +119,42 @@ export const createTask = (body: Partial<Task>) => api.post<Task>('/api/tasks', 
 export const updateTask = (id: string, patch: Partial<Task>) => api.put<Task>(`/api/tasks/${encodeURIComponent(id)}`, patch)
 export const deleteTask = (id: string) => api.delete<Task>(`/api/tasks/${encodeURIComponent(id)}`)
 
+/* ===== KB graph ===== */
+
+export interface SkillNode {
+  id: string
+  name: string
+  description?: string
+  tags?: string[]
+  path: string
+  source: 'skill' | 'agent' | 'workflow' | 'soul'
+}
+
+export interface SkillEdge {
+  source: string
+  target: string
+  kind: 'uses' | 'link' | 'composes' | 'step' | 'embodies'
+}
+
+export interface KbGraph {
+  nodes: SkillNode[]
+  edges: SkillEdge[]
+  diagnostics: Array<{ path: string; severity: 'error' | 'warn'; message: string }>
+}
+
+export const getKbGraph = () => api.get<KbGraph>('/api/kb/graph')
+
+export interface KbDetail {
+  name: string
+  source: string
+  path: string
+  frontmatter: Record<string, unknown>
+  body: string
+  edges: SkillEdge[]
+}
+
+export const getKbSkill = (name: string) => api.get<KbDetail>(`/api/kb/skill/${encodeURIComponent(name)}`)
+
 /* ===== Auth ===== */
 
 export const login = (token: string) => api.post<{ ok: true }>('/api/auth/login', { token })

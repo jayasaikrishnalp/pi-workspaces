@@ -1283,3 +1283,88 @@
   box-shadow: 0 0 0 2px rgba(29, 172, 254, 0.18);
 }
 .composer-send { white-space: nowrap; align-self: flex-end; height: 36px; }
+
+/* =========================================================
+   KNOWLEDGE GRAPH (Phase 4)
+   ========================================================= */
+.graph-screen {
+  display: flex; flex-direction: column;
+  height: 100%; min-height: 0;
+  padding: 16px 20px;
+  gap: 12px;
+}
+.graph-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.graph-header h2 { margin: 0; font-size: 22px; font-weight: 700; }
+.graph-subline { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.graph-legend { display: flex; gap: 12px; flex-wrap: wrap; }
+.legend-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+}
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+.legend-skill    { background: linear-gradient(135deg, #1dacfe, #27ddf3); }
+.legend-agent    { background: linear-gradient(135deg, #22c55e, #5eead4); }
+.legend-workflow { background: linear-gradient(135deg, #a855f7, #ec4899); }
+.legend-soul     { background: linear-gradient(135deg, #f97316, #facc15); }
+
+.graph-body {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 1fr 360px;
+  gap: 12px;
+  transition: grid-template-columns .25s ease;
+}
+.graph-body:has(> :only-child),
+.graph-body:not(:has(.skill-detail)) { grid-template-columns: 1fr; }
+.graph-canvas {
+  position: relative;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: auto;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.hexgraph { display: block; }
+.hexgraph-empty { padding: 64px 24px; text-align: center; max-width: 540px; }
+.hexgraph-empty h3 { font-size: 18px; font-weight: 700; margin: 6px 0; }
+.hexgraph-empty p { color: var(--text-secondary); font-size: 13px; }
+.hexgraph-empty code { font-family: var(--font-mono); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; }
+
+.skill-detail {
+  background: rgba(8, 11, 15, 0.55);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  min-height: 0; overflow-y: auto;
+  animation: slide-up .25s ease both;
+}
+.skill-detail-head { display: flex; align-items: center; gap: 10px; }
+.skill-detail-source {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--accent);
+  padding: 2px 6px; border-radius: 4px;
+  border: 1px solid var(--border-accent);
+  font-family: var(--font-mono);
+}
+.skill-detail-head h3 { margin: 0; font-size: 16px; font-weight: 700; font-family: var(--font-mono); flex: 1; }
+.skill-detail-close { padding: 2px 8px; height: 24px; }
+.skill-detail-desc { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.skill-detail-path { display: flex; flex-direction: column; gap: 4px; }
+.skill-detail-path code { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+.skill-detail-body pre { max-height: 260px; overflow: auto; }
+
+.skill-detail-edges { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.skill-edge-link {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left; color: inherit;
+  font-family: var(--font-mono); font-size: 11px;
+}
+.skill-edge-link:hover { border-color: var(--border-accent); }
+.skill-edge-kind { color: var(--text-secondary); }
+.skill-edge-name { color: var(--accent); }
