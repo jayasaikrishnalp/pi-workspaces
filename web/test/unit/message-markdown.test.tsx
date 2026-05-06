@@ -102,3 +102,84 @@ describe('Message — markdown rendering', () => {
     expect((window as unknown as { __pwn?: boolean }).__pwn).toBeUndefined()
   })
 })
+
+describe('Message — activity indicator', () => {
+  it('shows "Thinking…" while streaming with no text and no tools yet', () => {
+    render(<Message msg={msg({ id: 'a1', role: 'assistant', streaming: true })} />)
+    const ind = screen.getByTestId('chat-msg-a1-activity')
+    expect(ind.textContent).toMatch(/thinking/i)
+  })
+
+  it('shows "Calling <toolName>…" while a tool is running', () => {
+    render(<Message msg={msg({
+      id: 'a2', role: 'assistant', streaming: true,
+      toolCalls: [{ id: 't1', name: 'bash', status: 'running' }],
+    })} />)
+    expect(screen.getByTestId('chat-msg-a2-activity').textContent).toMatch(/bash/i)
+  })
+
+  it('shows "Streaming…" once text deltas arrive', () => {
+    render(<Message msg={msg({
+      id: 'a3', role: 'assistant', streaming: true,
+      text: 'partial',
+    })} />)
+    expect(screen.getByTestId('chat-msg-a3-activity').textContent).toMatch(/streaming/i)
+  })
+
+  it('does NOT show the activity indicator when streaming has finished', () => {
+    render(<Message msg={msg({
+      id: 'a4', role: 'assistant', text: 'final', streaming: false,
+    })} />)
+    expect(screen.queryByTestId('chat-msg-a4-activity')).toBeNull()
+  })
+
+  it('renders thinking content even while still streaming (no text yet)', () => {
+    render(<Message msg={msg({
+      id: 'a5', role: 'assistant', streaming: true,
+      thinking: 'I should check disk first',
+    })} />)
+    expect(screen.getByTestId('chat-msg-a5-thinking')).toBeVisible()
+    expect(screen.getByTestId('chat-msg-a5-thinking')).toHaveTextContent(/check disk/)
+  })
+})
+
+describe('Message — Save-as-skill gating', () => {
+  function withSave(text: string, extra: Partial<React.ComponentProps<typeof Message>['msg']> = {}) {
+    const onSaveSkill = vi.fn()
+    render(<Message msg={msg({ id: 's1', role: 'assistant', text, ...extra })} onSaveSkill={onSaveSkill} />)
+  }
+
+  it('does NOT show save-as-skill on short conversational replies', () => {
+    withSave('Hey! How are you?')
+    expect(screen.queryByTestId('chat-msg-s1-save-skill')).toBeNull()
+  })
+
+  it('does NOT show save-as-skill on simple one-liners even if they end in a period', () => {
+    withSave('I checked and everything looks fine.')
+    expect(screen.queryByTestId('chat-msg-s1-save-skill')).toBeNull()
+  })
+
+  it('shows save-as-skill when reply contains a fenced code block', () => {
+    const text = 'Run this:\n```bash\naws s3 ls\n```\nThen check the output.'
+    withSave(text)
+    expect(screen.getByTestId('chat-msg-s1-save-skill')).toBeVisible()
+  })
+
+  it('shows save-as-skill on long structured replies (numbered steps)', () => {
+    const text = [
+      'Here is the runbook:',
+      '1. Check the alarm',
+      '2. Pull metrics',
+      '3. Identify resource',
+      '4. Notify on-call',
+    ].join('\n')
+    withSave(text)
+    expect(screen.getByTestId('chat-msg-s1-save-skill')).toBeVisible()
+  })
+
+  it('does NOT show save-as-skill while still streaming', () => {
+    const text = 'Long enough text\n```bash\nls\n```'
+    withSave(text, { streaming: true })
+    expect(screen.queryByTestId('chat-msg-s1-save-skill')).toBeNull()
+  })
+})

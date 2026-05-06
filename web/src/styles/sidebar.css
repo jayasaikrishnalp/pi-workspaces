@@ -1318,6 +1318,31 @@
   animation: pulse-glow 1.2s ease-in-out infinite;
   padding: 2px 6px; border-radius: 4px; background: rgba(29,172,254,0.10);
 }
+/* Phase-aware activity indicator (replaces the dot-trio). */
+.chat-msg-activity {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(29, 172, 254, 0.06);
+  border: 1px solid rgba(29, 172, 254, 0.18);
+  border-radius: var(--r-md);
+  font-size: 12px; color: var(--accent);
+  font-family: var(--font-mono);
+  width: fit-content;
+}
+.chat-msg-activity-spinner {
+  width: 10px; height: 10px;
+  border: 1.5px solid rgba(29, 172, 254, 0.35);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+.chat-msg-activity-label {
+  letter-spacing: 0.02em;
+}
 .chat-msg-usage { margin-left: auto; font-family: var(--font-mono); font-size: 10px; }
 .chat-msg-text {
   font-size: 14px; line-height: 1.55;
