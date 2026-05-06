@@ -124,6 +124,7 @@ export async function handleProbe(
     agents: { count: agentsCount },
     workflows: { count: workflowsCount },
     memory: { count: memoryEntries },
+    mcp: { servers: w.mcpBroker?.getStatus?.() ?? [] },
     auth: { piAuthJsonPresent },
     workspace: {
       kbRoot: w.kbRoot,

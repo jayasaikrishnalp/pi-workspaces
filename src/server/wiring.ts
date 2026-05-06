@@ -10,6 +10,8 @@ import { KbEventBus, getKbEventBus } from './kb-event-bus.js'
 import { KbWatcher } from './kb-watcher.js'
 import { ConfluenceClient, ALLOWED_BASE_URL } from './confluence-client.js'
 import { AuthStore, getAuthStore } from './auth-store.js'
+import { McpBroker } from './mcp-broker.js'
+import { loadSeedConfig } from './mcp-config.js'
 import type { SessionInfo } from '../types/run.js'
 
 export type SpawnPi = (args: readonly string[], opts?: SpawnOptions) => ChildProcess
@@ -39,6 +41,8 @@ export interface Wiring {
   workspaceRoot: string
   /** Spawn callback for `pi`. Override in tests; defaults to spawning `pi`. */
   spawnPi: SpawnPi
+  /** MCP client pool. Lazy-connects per server on first use. */
+  mcpBroker: McpBroker
 }
 
 export interface WiringOptions {
@@ -122,12 +126,14 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   const authStore = getAuthStore({ workspaceRoot: root })
   const spawnPi: SpawnPi = options.spawnPi ?? ((args, opts) => spawn('pi', [...args], opts ?? {}))
 
+  const mcpBroker = new McpBroker(loadSeedConfig())
+
   const w: Wiring = {
     bus, runStore, tracker, bridge, sessions, kbBus,
     kbRoot, skillsDir, agentsDir, workflowsDir, memoryDir,
     watcher,
     confluence, confluenceConfigured, confluenceConfigError,
-    authStore, workspaceRoot: root, spawnPi,
+    authStore, workspaceRoot: root, spawnPi, mcpBroker,
   }
   globalThis.__wiring = w
   void authStore.load().catch((err) => {

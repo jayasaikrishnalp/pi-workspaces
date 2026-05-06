@@ -40,6 +40,21 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
+# Install the pi-bridge extension into ~/.pi/agent/extensions/. Idempotent.
+EXT_SRC="$REPO_ROOT/extensions/mcp-bridge"
+EXT_DEST="$HOME/.pi/agent/extensions/mcp-bridge"
+if [ -d "$EXT_SRC" ]; then
+  mkdir -p "$(dirname "$EXT_DEST")"
+  if [ ! -d "$EXT_DEST" ] || [ "$EXT_SRC/index.ts" -nt "$EXT_DEST/index.ts" ]; then
+    rm -rf "$EXT_DEST"
+    cp -R "$EXT_SRC" "$EXT_DEST"
+    echo "[start] installed mcp-bridge extension at $EXT_DEST"
+  fi
+fi
+
+# REF_API_KEY: backend lifts from ~/.claude.json automatically; no prompt needed.
+# Operator override: export REF_API_KEY=... before running this script.
+
 echo "[start] backend → http://127.0.0.1:$PORT"
 PORT="$PORT" \
   PI_WORKSPACE_ROOT="$PI_WORKSPACE_ROOT" \

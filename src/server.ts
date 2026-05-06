@@ -8,6 +8,8 @@
  */
 
 import http, { type IncomingMessage, type ServerResponse } from 'node:http'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import url from 'node:url'
 
@@ -70,6 +72,14 @@ import {
   PROVIDERS_LIST_PATH,
   PROVIDERS_ACTIVE_PATH,
 } from './routes/providers.js'
+import {
+  handleMcpServersList,
+  handleMcpToolsList,
+  handleMcpCall,
+  MCP_SERVERS_PATH,
+  MCP_TOOLS_PATH,
+  MCP_CALL_PATH,
+} from './routes/mcp.js'
 import {
   handleAuthLogin,
   handleAuthLogout,
@@ -135,6 +145,12 @@ const ROUTES: Route[] = [
   { method: 'GET', pattern: PROVIDERS_LIST_PATH, handler: handleProvidersList },
   { method: 'GET', pattern: PROVIDERS_ACTIVE_PATH, handler: handleProvidersActiveGet },
   { method: 'PUT', pattern: PROVIDERS_ACTIVE_PATH, handler: handleProvidersActiveSet },
+
+  // MCP broker — backend client pool, three endpoints consumed by the
+  // pi-bridge extension and (later) the frontend Settings tab.
+  { method: 'GET', pattern: MCP_SERVERS_PATH, handler: handleMcpServersList },
+  { method: 'GET', pattern: MCP_TOOLS_PATH, handler: handleMcpToolsList },
+  { method: 'POST', pattern: MCP_CALL_PATH, handler: handleMcpCall },
 
   // Stage 7 routes — auth + capability probe.
   { method: 'POST', pattern: AUTH_LOGIN_PATH, handler: handleAuthLogin },
@@ -230,6 +246,25 @@ function dispatch(req: IncomingMessage, res: ServerResponse, w: Wiring): void {
   })
 }
 
+function portFilePath(): string {
+  const root = process.env.PI_WORKSPACE_ROOT ?? path.join(os.homedir(), '.pi-workspace')
+  return path.join(root, 'server.port')
+}
+
+function writePortFile(port: number): void {
+  const p = portFilePath()
+  try {
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, String(port), { mode: 0o600 })
+  } catch (err) {
+    console.error(`[server] failed to write port file ${p}:`, err)
+  }
+}
+
+function removePortFile(): void {
+  try { fs.unlinkSync(portFilePath()) } catch { /* ignore */ }
+}
+
 function startServer(port: number, wiring?: Wiring): http.Server {
   const w = wiring ?? getWiring()
   const server = http.createServer((req, res) => dispatch(req, res, w))
@@ -241,7 +276,12 @@ function startServer(port: number, wiring?: Wiring): http.Server {
   server.listen(port, '127.0.0.1', () => {
     const addr = server.address()
     const boundPort = typeof addr === 'object' && addr ? addr.port : port
+    writePortFile(boundPort)
     console.log(`[server] listening on http://127.0.0.1:${boundPort} (v${VERSION})`)
+  })
+  server.on('close', () => {
+    removePortFile()
+    void w.mcpBroker?.shutdownAll().catch(() => undefined)
   })
   return server
 }
