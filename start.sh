@@ -62,8 +62,11 @@ PORT="$PORT" \
   node --import tsx src/server.ts &
 PIDS+=($!)
 
-echo "[start] frontend (Vite) → http://127.0.0.1:5173"
-(cd web && npm run dev -- --host 127.0.0.1) &
+# Vite host: defaults to localhost-only for dev safety. Set WEB_HOST=0.0.0.0
+# (e.g. on the lab VM) to expose Vite on the LAN/public interface.
+WEB_HOST="${WEB_HOST:-127.0.0.1}"
+echo "[start] frontend (Vite) → http://${WEB_HOST}:5173"
+(cd web && npm run dev -- --host "$WEB_HOST") &
 PIDS+=($!)
 
 # bash 3.2 (macOS) doesn't support `wait -n`; poll instead.
