@@ -1,0 +1,102 @@
+#!/bin/bash
+# ============================================================================
+# WK Azure Service Principal Login Helper
+# ============================================================================
+# Usage:
+#   source wk-azure-login.sh <SUBSCRIPTION_ID>
+#
+# Arguments:
+#   SUBSCRIPTION_ID  - Azure subscription ID (UUID format)
+#
+# Examples:
+#   source wk-azure-login.sh a1b2c3d4-e5f6-7890-abcd-ef1234567890
+#
+# Credentials are loaded from ~/.azure/.env
+# After sourcing, az CLI commands will use the target subscription.
+# ============================================================================
+
+set -euo pipefail
+
+# --- Configuration ---
+ENV_FILE="$HOME/.azure/.env"
+
+# --- Load credentials from .env ---
+if [[ ! -f "$ENV_FILE" ]]; then
+    echo "ERROR: Credentials file not found at $ENV_FILE"
+    return 1 2>/dev/null || exit 1
+fi
+
+source "$ENV_FILE"
+
+if [[ -z "${ARM_CLIENT_ID:-}" || -z "${ARM_CLIENT_SECRET:-}" || -z "${ARM_TENANT_ID:-}" ]]; then
+    echo "ERROR: Missing required variables in $ENV_FILE"
+    echo "Required: ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID"
+    return 1 2>/dev/null || exit 1
+fi
+
+# --- Input Validation ---
+SUBSCRIPTION_ID="${1:-}"
+
+if [[ -z "$SUBSCRIPTION_ID" ]]; then
+    echo "ERROR: Subscription ID is required."
+    echo "Usage: source wk-azure-login.sh <SUBSCRIPTION_ID>"
+    return 1 2>/dev/null || exit 1
+fi
+
+if [[ ! "$SUBSCRIPTION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+    echo "ERROR: Subscription ID must be a valid UUID. Got: $SUBSCRIPTION_ID"
+    return 1 2>/dev/null || exit 1
+fi
+
+# --- Step 1: Login with Service Principal ---
+echo "Logging in with WK Service Principal..."
+
+LOGIN_OUTPUT=$(az login --service-principal \
+    -u "$ARM_CLIENT_ID" \
+    -p "$ARM_CLIENT_SECRET" \
+    --tenant "$ARM_TENANT_ID" \
+    --output json 2>&1)
+
+if [[ $? -ne 0 ]]; then
+    echo "ERROR: Failed to login with service principal."
+    echo "$LOGIN_OUTPUT"
+    return 1 2>/dev/null || exit 1
+fi
+
+# --- Step 2: Set the target subscription ---
+echo "Setting subscription to ${SUBSCRIPTION_ID}..."
+
+az account set --subscription "$SUBSCRIPTION_ID" 2>&1
+if [[ $? -ne 0 ]]; then
+    echo "ERROR: Failed to set subscription. It may not be accessible with this service principal."
+    echo ""
+    echo "Available subscriptions:"
+    az account list --query '[].{Name:name, Id:id, State:state}' --output table
+    return 1 2>/dev/null || exit 1
+fi
+
+# --- Step 3: Export for Terraform compatibility ---
+export ARM_CLIENT_ID
+export ARM_CLIENT_SECRET
+export ARM_TENANT_ID
+export ARM_SUBSCRIPTION_ID="$SUBSCRIPTION_ID"
+
+# --- Step 4: Verify ---
+ACCOUNT_INFO=$(az account show --output json 2>/dev/null)
+ACCOUNT_NAME=$(echo "$ACCOUNT_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin)['name'])")
+ACCOUNT_ID=$(echo "$ACCOUNT_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+ACCOUNT_STATE=$(echo "$ACCOUNT_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin)['state'])")
+
+echo ""
+echo "============================================"
+echo "  WK Azure Connection Established"
+echo "============================================"
+echo "  Subscription:  $ACCOUNT_NAME"
+echo "  ID:            $ACCOUNT_ID"
+echo "  State:         $ACCOUNT_STATE"
+echo "  Tenant:        $ARM_TENANT_ID"
+echo "  Client:        $ARM_CLIENT_ID"
+echo "============================================"
+echo ""
+echo "Azure CLI is now configured for subscription $SUBSCRIPTION_ID."
+echo "Run any az command — credentials are active."

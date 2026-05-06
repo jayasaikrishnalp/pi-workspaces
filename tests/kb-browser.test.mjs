@@ -18,25 +18,20 @@ function writeSkill(kbRoot, name, content) {
   fs.writeFileSync(path.join(dir, 'SKILL.md'), content)
 }
 
-test('buildGraph on the seed skills produces 5 nodes and the expected edges', async () => {
+test('buildGraph on the default seed skills loads them cleanly', async () => {
   const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
   const seedDir = path.join(REPO, 'seed-skills')
   const g = await buildGraph(seedDir)
-  assert.equal(g.nodes.length, 5, `expected 5 seed nodes, got ${g.nodes.length}`)
+  // The shipped defaults are the 3 hive-default-skills (cloud connect + SDD).
+  // Test the property of the catalog we care about — every node loads without
+  // error — rather than locking in exact names that change as the catalog
+  // evolves.
   const ids = g.nodes.map((n) => n.id).sort()
-  assert.deepStrictEqual(ids, [
-    'aws-cleanup',
-    'check-server-health',
-    'disk-cleanup',
-    'patch-vm',
-    'reboot-server',
-  ])
-  // reboot-server uses check-server-health
-  const usesEdge = g.edges.find(
-    (e) => e.source === 'reboot-server' && e.target === 'check-server-health' && e.kind === 'uses',
-  )
-  assert.ok(usesEdge, 'expected reboot-server uses check-server-health')
-  // No diagnostics on the seeds (intentionally clean).
+  assert.equal(g.nodes.length, 3, `expected 3 seed nodes, got ${g.nodes.length} (${ids.join(',')})`)
+  assert.ok(ids.includes('connect-to-wk-azure'))
+  assert.ok(ids.includes('connecting-to-wk-aws'))
+  assert.ok(ids.includes('spec-driven-development'))
+  // Default catalog has no `uses:` edges declared.
   assert.deepStrictEqual(g.diagnostics, [], `unexpected diagnostics: ${JSON.stringify(g.diagnostics)}`)
 })
 
