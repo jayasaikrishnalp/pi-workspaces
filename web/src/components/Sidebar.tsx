@@ -164,7 +164,7 @@ export function Sidebar(props: Props): JSX.Element {
             <span className="sb-session-ago">{s.ago}</span>
           </button>
         ))}
-        <button className="sb-session ghost" onClick={() => onPick('sessions')}>
+        <button className="sb-session ghost" onClick={() => onPick('sessions')} data-testid="sb-item-sessions">
           <Icons.history size={11} /> All sessions →
         </button>
       </SidebarGroup>

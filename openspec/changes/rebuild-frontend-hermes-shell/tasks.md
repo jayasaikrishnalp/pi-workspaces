@@ -48,12 +48,12 @@
 
 ## Phase 6 — Jobs + Tasks + Terminal
 
-- [ ] 6.1 `JobsScreen.tsx` list + cancel + detail.
-- [ ] 6.2 `TasksScreen.tsx` kanban (columns by status) with drag-to-transition + idempotency-aware create.
-- [ ] 6.3 `TerminalScreen.tsx` exec console + audit log table.
-- [ ] 6.4 Vitest: tasks state-machine guard.
-- [ ] 6.5 Playwright `jobs-tasks-terminal.spec.ts` — terminal exec returns stdout, task created → moved through statuses, job cancel.
-- [ ] 6.6 Phase 6 commit + push.
+- [x] 6.1 `JobsScreen.tsx` list + cancel + detail.
+- [x] 6.2 `TasksScreen.tsx` kanban (columns by status) with drag-to-transition + idempotency-aware create.
+- [x] 6.3 `TerminalScreen.tsx` exec console + audit log table.
+- [x] 6.4 Vitest: tasks state-machine guard.
+- [x] 6.5 Playwright `jobs-tasks-terminal.spec.ts` — terminal exec returns stdout, task created → moved through statuses, job cancel.
+- [x] 6.6 Phase 6 commit + push.
 
 ## Phase 7 — MCP + Confluence + Settings + Overlays
 

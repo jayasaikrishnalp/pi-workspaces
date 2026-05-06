@@ -1435,3 +1435,85 @@
   box-shadow: var(--shadow-panel);
 }
 .kb-modal h3 { margin: 0 0 4px 0; font-size: 18px; font-weight: 700; }
+
+/* =========================================================
+   JOBS / TASKS / TERMINAL (Phase 6)
+   ========================================================= */
+.jobs-table {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  font-family: var(--font-mono); font-size: 12px;
+}
+.jobs-table th {
+  text-align: left; padding: 8px 10px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.jobs-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: middle;
+}
+.jobs-table tr:hover td { background: rgba(255,255,255,0.02); }
+.btn.small { height: 22px; padding: 0 8px; font-size: 10px; border-radius: 6px; }
+.mono { font-family: var(--font-mono); }
+.small { font-size: 11px; }
+
+.tasks-screen { overflow: hidden; }
+.kanban {
+  display: grid; grid-template-columns: repeat(6, minmax(180px, 1fr));
+  gap: 8px;
+  flex: 1; min-height: 0;
+  overflow-x: auto;
+}
+.kanban-col {
+  display: flex; flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  min-width: 180px;
+  overflow: hidden;
+}
+.kanban-col-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(8, 11, 15, 0.5);
+}
+.kanban-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+.kanban-col-body { padding: 8px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; }
+.kanban-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.kanban-card-title { font-size: 12px; line-height: 1.4; }
+.kanban-card-meta { display: flex; gap: 6px; font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); }
+.kanban-card-source { padding: 1px 5px; border-radius: 3px; background: rgba(255,255,255,0.04); }
+.kanban-card-priority { color: var(--accent); }
+
+.terminal-form {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(8, 11, 15, 0.5);
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.terminal-prompt { color: var(--accent); font-family: var(--font-mono); font-weight: 700; }
+.terminal-input { flex: 1; font-family: var(--font-mono); border: 0; background: transparent; padding: 0; }
+.terminal-input:focus { box-shadow: none; outline: none; }
+.terminal-output {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.terminal-output-head {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+}
+.terminal-stderr { background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.18); }
+.terminal-audit { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
