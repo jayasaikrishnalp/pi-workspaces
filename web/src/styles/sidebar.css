@@ -1687,3 +1687,42 @@
   font-size: 11px;
   font-style: italic;
 }
+
+/* Dashboard providers + cost panels */
+.provider-row.active { border: 1px solid var(--accent); background: rgba(29,172,254,0.08); }
+.provider-active-pill {
+  display: inline-block; margin-left: 6px;
+  padding: 1px 5px; border-radius: 3px;
+  background: var(--accent); color: #001220;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+}
+.provider-switcher {
+  display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px;
+  margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+
+.cost-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+  margin-top: 4px;
+}
+.cost-cell {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+}
+.cost-cell.highlight {
+  border-color: var(--border-accent);
+  background: rgba(29, 172, 254, 0.08);
+}
+.cost-cell-label { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); }
+.cost-cell-value { font-size: 22px; font-weight: 700; font-family: var(--font-mono); }
+.cost-note {
+  font-size: 11px; color: var(--text-secondary);
+  line-height: 1.5; margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 6px; border-left: 2px solid var(--accent-deep);
+}
+.cost-note code { font-family: var(--font-mono); background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 3px; }

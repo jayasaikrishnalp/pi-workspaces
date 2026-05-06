@@ -1,5 +1,9 @@
 import { useApi } from '../../hooks/useApi'
-import { listJobs, listTasks, probe, type Job, type Task } from '../../lib/api'
+import {
+  listJobs, listTasks, probe, listProviders, getActiveProvider, setActiveProvider,
+  type Job, type Task, type Provider,
+} from '../../lib/api'
+import { useState, useEffect } from 'react'
 import type { ScreenId } from '../Sidebar'
 
 interface Props { onPick?: (id: ScreenId) => void }
@@ -37,6 +41,147 @@ function TaskRow({ task }: { task: Task }): JSX.Element {
       <span className={`dash-row-status status-${task.status}`}>{task.status}</span>
       <span className="dash-row-title">{task.title}</span>
       <span className="dash-row-meta">{task.source}</span>
+    </div>
+  )
+}
+
+/**
+ * Provider + model matrix wired to /api/providers + /api/providers/active.
+ * Lets the operator see which providers are configured, how many models each
+ * exposes, and pick the active one inline (no need to dive into Settings).
+ */
+function ProvidersPanel({ testId }: { testId?: string }): JSX.Element {
+  const list = useApi('dash.providers', listProviders)
+  const active = useApi('dash.active-provider', getActiveProvider)
+  const [pendingProvider, setPendingProvider] = useState<string | null>(null)
+  const [pendingModel, setPendingModel] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (active.data) {
+      setPendingProvider(active.data.providerId)
+      setPendingModel(active.data.modelId)
+    }
+  }, [active.data])
+
+  const provs: Provider[] = list.data?.providers ?? []
+  const selected = provs.find((p) => p.id === pendingProvider)
+  const isActive = (p: Provider) => active.data?.providerId === p.id
+
+  const apply = async () => {
+    if (!pendingProvider || !pendingModel) return
+    setBusy(true); setError(null)
+    try {
+      await setActiveProvider(pendingProvider, pendingModel)
+      active.reload()
+    } catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="dash-panel" data-testid={testId}>
+      <div className="dash-panel-head">
+        <span className="kk-label-tiny">MODELS &amp; PROVIDERS</span>
+        <span className="dash-panel-meta">{provs.filter((p) => p.status === 'configured' || p.status === 'detected').length}/{provs.length} ready</span>
+      </div>
+      {list.loading && !list.data ? <div className="dash-empty">loading…</div>
+        : provs.length === 0 ? <div className="dash-empty">no providers in catalog</div>
+        : (
+          <>
+            <div className="dash-rows" data-testid={`${testId}-list`}>
+              {provs.map((p) => (
+                <div key={p.id}
+                     className={`dash-row provider-row ${isActive(p) ? 'active' : ''}`}
+                     data-testid={`provider-row-${p.id}`}>
+                  <span className={`dash-row-status status-${p.status === 'configured' || p.status === 'detected' ? 'completed' : p.status === 'error' ? 'failed' : 'queued'}`}>
+                    {p.status}
+                  </span>
+                  <span className="dash-row-title">
+                    {p.name}{isActive(p) ? <span className="provider-active-pill">ACTIVE</span> : null}
+                  </span>
+                  <span className="dash-row-meta">{p.kind} · {p.models.length} {p.models.length === 1 ? 'model' : 'models'}</span>
+                </div>
+              ))}
+            </div>
+            <div className="provider-switcher">
+              <select
+                className="input"
+                value={pendingProvider ?? ''}
+                onChange={(e) => { setPendingProvider(e.target.value || null); setPendingModel(null) }}
+                data-testid="provider-switcher-provider"
+              >
+                <option value="">— pick provider —</option>
+                {provs.map((p) => (
+                  <option key={p.id} value={p.id} disabled={p.status === 'unconfigured' || p.status === 'error'}>
+                    {p.name} · {p.status}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="input"
+                value={pendingModel ?? ''}
+                onChange={(e) => setPendingModel(e.target.value || null)}
+                disabled={!selected}
+                data-testid="provider-switcher-model"
+              >
+                <option value="">— pick model —</option>
+                {selected?.models.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <button
+                className="btn btn-primary"
+                onClick={apply}
+                disabled={busy || !pendingProvider || !pendingModel || (pendingProvider === active.data?.providerId && pendingModel === active.data?.modelId)}
+                data-testid="provider-switcher-apply"
+              >
+                {busy ? 'saving…' : 'set active'}
+              </button>
+            </div>
+            {error ? <div className="chat-msg-error">{error}</div> : null}
+          </>
+        )}
+    </div>
+  )
+}
+
+/**
+ * Cost & usage at-a-glance. Backend doesn't track per-session totals yet
+ * (deferred to add-chat-controls-multi-model), so the values here mirror
+ * the statusbar's placeholder zeros — but they're surfaced prominently so
+ * the operator sees where token + cost telemetry will land.
+ */
+function CostPanel({ testId }: { testId?: string }): JSX.Element {
+  // Placeholders. Once the bridge tracks tokens/cost, swap to live data.
+  const session = { in: 0, out: 0, ctxPct: 0, usd: 0, totalSessions: 0 }
+  return (
+    <div className="dash-panel" data-testid={testId}>
+      <div className="dash-panel-head">
+        <span className="kk-label-tiny">COST &amp; USAGE</span>
+        <span className="dash-panel-meta">{session.totalSessions} sessions · current</span>
+      </div>
+      <div className="cost-grid">
+        <div className="cost-cell" data-testid={`${testId}-in`}>
+          <span className="cost-cell-label">TOKENS IN</span>
+          <span className="cost-cell-value">{session.in.toLocaleString()}</span>
+        </div>
+        <div className="cost-cell" data-testid={`${testId}-out`}>
+          <span className="cost-cell-label">TOKENS OUT</span>
+          <span className="cost-cell-value">{session.out.toLocaleString()}</span>
+        </div>
+        <div className="cost-cell" data-testid={`${testId}-ctx`}>
+          <span className="cost-cell-label">CONTEXT</span>
+          <span className="cost-cell-value">{session.ctxPct}%</span>
+        </div>
+        <div className="cost-cell highlight" data-testid={`${testId}-usd`}>
+          <span className="cost-cell-label">SESSION COST</span>
+          <span className="cost-cell-value">${session.usd.toFixed(2)}</span>
+        </div>
+      </div>
+      <div className="cost-note">
+        Token + cost telemetry lands with the <code>add-chat-controls-multi-model</code>
+        change. The pi bridge will surface usage data per run; this panel will then
+        show live totals across the active session.
+      </div>
     </div>
   )
 }
@@ -94,6 +239,11 @@ export function DashboardScreen({ onPick }: Props = {}): JSX.Element {
         <StatCard testId="stat-jobs"      label="JOBS"      value={counts.jobs} />
         <StatCard testId="stat-tasks"     label="TASKS"     value={counts.tasks} />
         <StatCard testId="stat-terminal"  label="TERMINAL"  value={counts.terminal} hint="commands run" />
+      </div>
+
+      <div className="dash-2col">
+        <CostPanel testId="dash-cost" />
+        <ProvidersPanel testId="dash-providers" />
       </div>
 
       <div className="dash-2col">

@@ -74,4 +74,23 @@ test.describe('Dashboard screen', () => {
     await expect(page.getByTestId('mcp-pill-ref')).toBeVisible()
     await expect(page.getByTestId('mcp-pill-context7')).toBeVisible()
   })
+
+  test('Models & Providers panel lists all 8 seed providers with status', async ({ page, state }) => {
+    await loginAndVisit(page, state)
+    await page.getByTestId('sb-item-dashboard').click()
+    await expect(page.getByTestId('dash-providers')).toBeVisible({ timeout: 5_000 })
+    for (const id of ['github-copilot', 'anthropic', 'openai', 'openrouter', 'google', 'x-ai', 'deepseek', 'ollama']) {
+      await expect(page.getByTestId(`provider-row-${id}`)).toBeVisible()
+    }
+  })
+
+  test('Cost & Usage panel shows the four cost cells', async ({ page, state }) => {
+    await loginAndVisit(page, state)
+    await page.getByTestId('sb-item-dashboard').click()
+    await expect(page.getByTestId('dash-cost')).toBeVisible()
+    for (const k of ['in', 'out', 'ctx', 'usd']) {
+      await expect(page.getByTestId(`dash-cost-${k}`)).toBeVisible()
+    }
+    await expect(page.getByTestId('dash-cost-usd')).toContainText('$0.00')
+  })
 })
