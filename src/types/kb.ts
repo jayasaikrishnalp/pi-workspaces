@@ -3,7 +3,7 @@
  * Memory files exist on disk but are intentionally NOT graph nodes — they
  * are operator-owned text, surfaced through /api/memory only.
  */
-export type KbNodeKind = 'skill' | 'agent' | 'workflow'
+export type KbNodeKind = 'skill' | 'agent' | 'workflow' | 'soul'
 
 export interface SkillNode {
   id: string
@@ -23,8 +23,9 @@ export interface SkillEdge {
    * - `link`: skill → skill, derived from a body wikilink `[[name]]`
    * - `composes`: agent → skill, one per agent's `skills[]` entry
    * - `step`: workflow → skill OR workflow → workflow, one per workflow's `steps[]` entry
+   * - `embodies`: agent → soul, derived from agent's optional `soul:` frontmatter field
    */
-  kind: 'uses' | 'link' | 'composes' | 'step'
+  kind: 'uses' | 'link' | 'composes' | 'step' | 'embodies'
 }
 
 export interface Diagnostic {

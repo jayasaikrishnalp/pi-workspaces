@@ -29,6 +29,10 @@ export type SkillWriteErrorCode =
   | 'INVALID_WORKFLOW_STEPS'
   | 'WORKFLOW_EXISTS'
   | 'UNKNOWN_WORKFLOW'
+  // Soul-specific
+  | 'INVALID_SOUL_NAME'
+  | 'SOUL_EXISTS'
+  | 'UNKNOWN_SOUL'
   // Shared
   | 'INVALID_FRONTMATTER'
   | 'BODY_TOO_LARGE'

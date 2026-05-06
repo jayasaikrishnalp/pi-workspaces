@@ -80,6 +80,19 @@ import {
   MCP_TOOLS_PATH,
   MCP_CALL_PATH,
 } from './routes/mcp.js'
+import { handleSearch, SEARCH_PATH } from './routes/search.js'
+import {
+  handleSoulsList, handleSoulsCreate, handleSoulsRead, handleSoulsUpdate,
+  SOULS_PATH, SOULS_DETAIL_PATTERN,
+} from './routes/souls.js'
+import {
+  handleJobsList, handleJobsRead, handleJobsCancel,
+  JOBS_PATH, JOBS_DETAIL_PATTERN, JOBS_CANCEL_PATTERN,
+} from './routes/jobs.js'
+import {
+  handleTasksList, handleTasksCreate, handleTasksRead, handleTasksUpdate, handleTasksDelete,
+  TASKS_PATH, TASKS_DETAIL_PATTERN,
+} from './routes/tasks.js'
 import {
   handleAuthLogin,
   handleAuthLogout,
@@ -151,6 +164,27 @@ const ROUTES: Route[] = [
   { method: 'GET', pattern: MCP_SERVERS_PATH, handler: handleMcpServersList },
   { method: 'GET', pattern: MCP_TOOLS_PATH, handler: handleMcpToolsList },
   { method: 'POST', pattern: MCP_CALL_PATH, handler: handleMcpCall },
+
+  // Global FTS5 search across kb (skills/agents/workflows/memory/souls) + chat.
+  { method: 'GET', pattern: SEARCH_PATH, handler: handleSearch },
+
+  // Souls — agent character / identity definitions.
+  { method: 'GET', pattern: SOULS_PATH, handler: handleSoulsList },
+  { method: 'POST', pattern: SOULS_PATH, handler: handleSoulsCreate },
+  { method: 'GET', pattern: SOULS_DETAIL_PATTERN, handler: handleSoulsRead },
+  { method: 'PUT', pattern: SOULS_DETAIL_PATTERN, handler: handleSoulsUpdate },
+
+  // Jobs — persistent units of agent work (one per chat send).
+  { method: 'GET', pattern: JOBS_PATH, handler: handleJobsList },
+  { method: 'GET', pattern: JOBS_DETAIL_PATTERN, handler: handleJobsRead },
+  { method: 'POST', pattern: JOBS_CANCEL_PATTERN, handler: handleJobsCancel },
+
+  // Tasks — operator + agent todos.
+  { method: 'GET', pattern: TASKS_PATH, handler: handleTasksList },
+  { method: 'POST', pattern: TASKS_PATH, handler: handleTasksCreate },
+  { method: 'GET', pattern: TASKS_DETAIL_PATTERN, handler: handleTasksRead },
+  { method: 'PUT', pattern: TASKS_DETAIL_PATTERN, handler: handleTasksUpdate },
+  { method: 'DELETE', pattern: TASKS_DETAIL_PATTERN, handler: handleTasksDelete },
 
   // Stage 7 routes — auth + capability probe.
   { method: 'POST', pattern: AUTH_LOGIN_PATH, handler: handleAuthLogin },
@@ -282,6 +316,7 @@ function startServer(port: number, wiring?: Wiring): http.Server {
   server.on('close', () => {
     removePortFile()
     void w.mcpBroker?.shutdownAll().catch(() => undefined)
+    try { w.db?.close() } catch { /* ignore */ }
   })
   return server
 }

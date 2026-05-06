@@ -8,6 +8,9 @@ import { buildGraph } from '../server/kb-browser.js'
 import { listKbEntities } from '../server/kb-writer.js'
 import { listMemory } from '../server/memory-writer.js'
 import { ProvidersClient } from '../server/providers-client.js'
+import { JobsStore } from '../server/jobs-store.js'
+import { TasksStore } from '../server/tasks-store.js'
+import { getSchemaVersion } from '../server/db.js'
 import type { Wiring } from '../server/wiring.js'
 
 export const PROBE_PATH = '/api/probe'
@@ -100,11 +103,30 @@ export async function handleProbe(
   try {
     skillsCount = (await buildGraph(w.kbRoot)).nodes.filter((n) => n.source === 'skill').length
   } catch { /* ignore */ }
-  const [agentsCount, workflowsCount, memoryEntries] = await Promise.all([
+  const [agentsCount, workflowsCount, memoryEntries, soulsCount] = await Promise.all([
     listKbEntities(w.kbRoot, 'agents').then((a) => a.length).catch(() => 0),
     listKbEntities(w.kbRoot, 'workflows').then((a) => a.length).catch(() => 0),
     listMemory(w.kbRoot).then((a) => a.length).catch(() => 0),
+    listKbEntities(w.kbRoot, 'souls').then((a) => a.length).catch(() => 0),
   ])
+
+  // SQLite + jobs + tasks (best-effort; absent in some test wirings).
+  let dbInfo: { ok: boolean; schemaVersion?: number } = { ok: false }
+  let jobsCount = 0
+  let tasksCount = 0
+  let tasksByStatus: Record<string, number> = {}
+  if (w.db) {
+    try {
+      const ver = getSchemaVersion(w.db)
+      dbInfo = { ok: true, schemaVersion: ver }
+      jobsCount = new JobsStore(w.db).totalCount()
+      const tasks = new TasksStore(w.db)
+      tasksCount = tasks.totalCount()
+      tasksByStatus = tasks.countByStatus()
+    } catch {
+      dbInfo = { ok: false }
+    }
+  }
 
   jsonOk(res, 200, {
     pi: {
@@ -124,6 +146,10 @@ export async function handleProbe(
     agents: { count: agentsCount },
     workflows: { count: workflowsCount },
     memory: { count: memoryEntries },
+    souls: { count: soulsCount },
+    jobs: { count: jobsCount },
+    tasks: { count: tasksCount, byStatus: tasksByStatus },
+    db: dbInfo,
     mcp: { servers: w.mcpBroker?.getStatus?.() ?? [] },
     auth: { piAuthJsonPresent },
     workspace: {

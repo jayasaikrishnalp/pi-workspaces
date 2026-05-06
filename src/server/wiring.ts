@@ -10,8 +10,11 @@ import { KbEventBus, getKbEventBus } from './kb-event-bus.js'
 import { KbWatcher } from './kb-watcher.js'
 import { ConfluenceClient, ALLOWED_BASE_URL } from './confluence-client.js'
 import { AuthStore, getAuthStore } from './auth-store.js'
+import fsSync from 'node:fs'
+
 import { McpBroker } from './mcp-broker.js'
 import { loadSeedConfig } from './mcp-config.js'
+import { openDb, upsertKbFts, deleteKbFts, type Db } from './db.js'
 import type { SessionInfo } from '../types/run.js'
 
 export type SpawnPi = (args: readonly string[], opts?: SpawnOptions) => ChildProcess
@@ -43,6 +46,8 @@ export interface Wiring {
   spawnPi: SpawnPi
   /** MCP client pool. Lazy-connects per server on first use. */
   mcpBroker: McpBroker
+  /** SQLite handle for jobs / tasks / FTS5 / chat_messages. Tests may omit it. */
+  db?: Db
 }
 
 export interface WiringOptions {
@@ -127,13 +132,43 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   const spawnPi: SpawnPi = options.spawnPi ?? ((args, opts) => spawn('pi', [...args], opts ?? {}))
 
   const mcpBroker = new McpBroker(loadSeedConfig())
+  const db = openDb(path.join(root, 'data.sqlite'))
+
+  // Wire kb-watcher → kb_fts: re-index any change under skills/agents/
+  // workflows/memory/souls. Best-effort; an indexing failure must NOT crash
+  // the server.
+  kbBus.subscribe((evt) => {
+    try {
+      const rel = path.relative(kbRoot, evt.path).split(path.sep).join('/')
+      const m = /^(skills|agents|workflows|memory|souls)\/([a-z][a-z0-9-]*)/.exec(rel)
+      if (!m) return
+      const subdir = m[1]!
+      const name = m[2]!
+      const kind = subdir === 'skills' ? 'skill'
+        : subdir === 'agents' ? 'agent'
+        : subdir === 'workflows' ? 'workflow'
+        : subdir === 'memory' ? 'memory'
+        : 'soul'
+      if (evt.kind === 'unlink' || evt.kind === 'unlinkDir') {
+        deleteKbFts(db, kind, name)
+        return
+      }
+      if (evt.kind === 'add' || evt.kind === 'change') {
+        let body = ''
+        try { body = fsSync.readFileSync(evt.path, 'utf8') } catch { return }
+        upsertKbFts(db, kind, name, body)
+      }
+    } catch (err) {
+      console.error('[wiring] kb_fts indexer threw:', err)
+    }
+  })
 
   const w: Wiring = {
     bus, runStore, tracker, bridge, sessions, kbBus,
     kbRoot, skillsDir, agentsDir, workflowsDir, memoryDir,
     watcher,
     confluence, confluenceConfigured, confluenceConfigError,
-    authStore, workspaceRoot: root, spawnPi, mcpBroker,
+    authStore, workspaceRoot: root, spawnPi, mcpBroker, db,
   }
   globalThis.__wiring = w
   void authStore.load().catch((err) => {

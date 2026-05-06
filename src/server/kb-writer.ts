@@ -20,11 +20,12 @@ import {
  * Use `updateKbFile` to merge-update an existing entity (404s if missing).
  */
 
-export type KbWriteKind = 'skills' | 'agents' | 'workflows'
+export type KbWriteKind = 'skills' | 'agents' | 'workflows' | 'souls'
 export const FILENAME_BY_KIND: Record<KbWriteKind, string> = {
   skills: 'SKILL.md',
   agents: 'AGENT.md',
   workflows: 'WORKFLOW.md',
+  souls: 'SOUL.md',
 }
 
 export interface WriteKbFileInput {
@@ -42,7 +43,7 @@ export interface WriteKbFileResult {
   absPath: string
 }
 
-function checkName(name: string, code: 'INVALID_SKILL_NAME' | 'INVALID_AGENT_NAME' | 'INVALID_WORKFLOW_NAME'): void {
+function checkName(name: string, code: 'INVALID_SKILL_NAME' | 'INVALID_AGENT_NAME' | 'INVALID_WORKFLOW_NAME' | 'INVALID_SOUL_NAME'): void {
   if (!SKILL_NAME_RE.test(name)) {
     throw new SkillWriteError(code, `name must match ${SKILL_NAME_RE}; got ${JSON.stringify(name)}`)
   }
@@ -54,21 +55,24 @@ function checkBody(body: string): void {
   }
 }
 
-function nameErrorCodeFor(kind: KbWriteKind): 'INVALID_SKILL_NAME' | 'INVALID_AGENT_NAME' | 'INVALID_WORKFLOW_NAME' {
+function nameErrorCodeFor(kind: KbWriteKind): 'INVALID_SKILL_NAME' | 'INVALID_AGENT_NAME' | 'INVALID_WORKFLOW_NAME' | 'INVALID_SOUL_NAME' {
   return kind === 'skills' ? 'INVALID_SKILL_NAME'
     : kind === 'agents' ? 'INVALID_AGENT_NAME'
+    : kind === 'souls' ? 'INVALID_SOUL_NAME'
     : 'INVALID_WORKFLOW_NAME'
 }
 
-function existsErrorCodeFor(kind: KbWriteKind): 'SKILL_EXISTS' | 'AGENT_EXISTS' | 'WORKFLOW_EXISTS' {
+function existsErrorCodeFor(kind: KbWriteKind): 'SKILL_EXISTS' | 'AGENT_EXISTS' | 'WORKFLOW_EXISTS' | 'SOUL_EXISTS' {
   return kind === 'skills' ? 'SKILL_EXISTS'
     : kind === 'agents' ? 'AGENT_EXISTS'
+    : kind === 'souls' ? 'SOUL_EXISTS'
     : 'WORKFLOW_EXISTS'
 }
 
-function unknownErrorCodeFor(kind: KbWriteKind): 'UNKNOWN_SKILL' | 'UNKNOWN_AGENT' | 'UNKNOWN_WORKFLOW' {
+function unknownErrorCodeFor(kind: KbWriteKind): 'UNKNOWN_SKILL' | 'UNKNOWN_AGENT' | 'UNKNOWN_WORKFLOW' | 'UNKNOWN_SOUL' {
   return kind === 'skills' ? 'UNKNOWN_SKILL'
     : kind === 'agents' ? 'UNKNOWN_AGENT'
+    : kind === 'souls' ? 'UNKNOWN_SOUL'
     : 'UNKNOWN_WORKFLOW'
 }
 

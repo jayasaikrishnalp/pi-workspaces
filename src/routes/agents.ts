@@ -52,7 +52,7 @@ export async function handleAgentsCreate(req: IncomingMessage, res: ServerRespon
     jsonError(res, 400, 'BAD_REQUEST', 'body must be a JSON object')
     return
   }
-  const { name, description, skills, persona } = body as Record<string, unknown>
+  const { name, description, skills, persona, soul } = body as Record<string, unknown>
   if (typeof name !== 'string') {
     jsonError(res, 400, 'INVALID_AGENT_NAME', 'name must be a string')
     return
@@ -65,12 +65,24 @@ export async function handleAgentsCreate(req: IncomingMessage, res: ServerRespon
     jsonError(res, 400, 'BAD_REQUEST', 'persona must be a string when provided')
     return
   }
+  if (soul !== undefined && typeof soul !== 'string') {
+    jsonError(res, 400, 'BAD_REQUEST', 'soul must be a string when provided')
+    return
+  }
   try {
     const knownSkills = new Set(await listKbEntities(w.kbRoot, 'skills'))
+    const knownSouls = new Set(await listKbEntities(w.kbRoot, 'souls'))
     const result = await writeAgent(
       w.kbRoot,
-      { name, description: description as string | undefined, skills: skills as string[], persona: persona as string | undefined },
+      {
+        name,
+        description: description as string | undefined,
+        skills: skills as string[],
+        persona: persona as string | undefined,
+        soul: soul as string | undefined,
+      },
       knownSkills,
+      knownSouls,
     )
     jsonOk(res, 201, { name, path: result.relPath })
   } catch (err) {
@@ -119,9 +131,10 @@ export async function handleAgentsUpdate(req: IncomingMessage, res: ServerRespon
     jsonError(res, 400, 'BAD_REQUEST', 'body must be a JSON object')
     return
   }
-  const { description, skills, persona } = body as Record<string, unknown>
+  const { description, skills, persona, soul } = body as Record<string, unknown>
   try {
     const knownSkills = new Set(await listKbEntities(w.kbRoot, 'skills'))
+    const knownSouls = new Set(await listKbEntities(w.kbRoot, 'souls'))
     const result = await patchAgent(
       w.kbRoot,
       name,
@@ -129,8 +142,10 @@ export async function handleAgentsUpdate(req: IncomingMessage, res: ServerRespon
         description: description as string | undefined,
         skills: skills as string[] | undefined,
         persona: persona as string | undefined,
+        soul: soul as string | undefined,
       },
       knownSkills,
+      knownSouls,
     )
     jsonOk(res, 200, { name, path: result.relPath })
   } catch (err) {
@@ -145,6 +160,7 @@ function handleWriteError(res: ServerResponse, err: unknown): void {
       : err.code === 'INVALID_AGENT_SKILLS' ? 400
       : err.code === 'INVALID_FRONTMATTER' ? 400
       : err.code === 'BODY_TOO_LARGE' ? 400
+      : err.code === 'UNKNOWN_SOUL' ? 400
       : err.code === 'AGENT_EXISTS' ? 409
       : err.code === 'UNKNOWN_AGENT' ? 404
       : 500

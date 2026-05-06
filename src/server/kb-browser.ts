@@ -12,12 +12,14 @@ const KIND_FILE: Record<KbNodeKind, string> = {
   skill: 'SKILL.md',
   agent: 'AGENT.md',
   workflow: 'WORKFLOW.md',
+  soul: 'SOUL.md',
 }
 
 const KIND_SUBDIR: Record<KbNodeKind, string> = {
   skill: 'skills',
   agent: 'agents',
   workflow: 'workflows',
+  soul: 'souls',
 }
 
 interface ParsedEntity {
@@ -48,11 +50,12 @@ export async function buildGraph(kbRoot: string): Promise<KbGraph> {
     skill: new Set(),
     agent: new Set(),
     workflow: new Set(),
+    soul: new Set(),
   }
 
   // First pass: parse every entity, collect ids per kind.
   const parsed: ParsedEntity[] = []
-  for (const kind of ['skill', 'agent', 'workflow'] as const) {
+  for (const kind of ['skill', 'agent', 'workflow', 'soul'] as const) {
     const subdir = path.join(kbRoot, KIND_SUBDIR[kind])
     let dirEntries: string[]
     try {
@@ -194,6 +197,21 @@ export async function buildGraph(kbRoot: string): Promise<KbGraph> {
           message: 'agent missing required `skills` array',
         })
       }
+      // Embodies edge from optional soul: ref.
+      const soulRef = p.frontmatter.soul
+      if (typeof soulRef === 'string' && soulRef.length > 0) {
+        if (!idsByKind.soul.has(soulRef)) {
+          diagnostics.push({
+            path: p.relPath,
+            severity: 'warn',
+            message: `\`soul\` references unknown soul "${soulRef}"`,
+          })
+        } else {
+          pushEdge(soulRef, 'embodies')
+        }
+      }
+    } else if (p.kind === 'soul') {
+      // Souls have no outgoing edges; they're referenced by agents.
     } else {
       // Workflow: step edges from steps[]. Steps are encoded as "<kind>:<ref>".
       const steps = decodeSteps(p.frontmatter.steps)
