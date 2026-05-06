@@ -6,6 +6,7 @@ import { Statusbar } from './components/shell/Statusbar'
 import { ProbeBanner } from './components/shell/ProbeBanner'
 import { PlaceholderScreen } from './components/screens/PlaceholderScreen'
 import { DashboardScreen } from './components/screens/DashboardScreen'
+import { ChatScreen } from './components/screens/ChatScreen'
 import { Login } from './components/Login'
 import { useApi } from './hooks/useApi'
 import { probe } from './lib/api'
@@ -74,6 +75,8 @@ export function App(): JSX.Element {
         <div className="main-content">
           {active === 'dashboard' ? (
             <DashboardScreen />
+          ) : active === 'chat' ? (
+            <ChatScreen />
           ) : (
             <PlaceholderScreen id={active} preview={isPreview} />
           )}

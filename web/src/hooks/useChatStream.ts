@@ -1,0 +1,96 @@
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+
+import { reduce, INITIAL_CHAT_STATE, appendUserMessage, type ChatState } from '../lib/streamingMessage'
+
+interface ServerEvent {
+  event: string
+  data: Record<string, unknown>
+  meta?: { runId?: string; sessionKey?: string; seq?: number; eventId?: string }
+}
+
+type ChatAction =
+  | { kind: 'event'; event: ServerEvent }
+  | { kind: 'user'; text: string }
+  | { kind: 'reset' }
+
+function chatReducer(state: ChatState, action: ChatAction): ChatState {
+  switch (action.kind) {
+    case 'event': return reduce(state, action.event)
+    case 'user':  return appendUserMessage(state, action.text)
+    case 'reset': return INITIAL_CHAT_STATE
+  }
+}
+
+interface SessionResp { sessionKey: string }
+
+/**
+ * Manages a chat session: ensures one exists, opens an SSE subscription
+ * to /api/chat-events?sessionKey=..., reduces incoming events, exposes
+ * `messages`, `streaming`, `error`, and a `send(text)` action.
+ */
+export function useChatStream() {
+  const [state, dispatch] = useReducer(chatReducer, INITIAL_CHAT_STATE)
+  const [sessionKey, setSessionKey] = useState<string | null>(null)
+  const esRef = useRef<EventSource | null>(null)
+
+  // Create or reuse a session.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const stored = sessionStorage.getItem('hive.sessionKey')
+      if (stored) { if (!cancelled) setSessionKey(stored); return }
+      const r = await fetch('/api/sessions', { method: 'POST', credentials: 'same-origin' })
+      if (!r.ok) return
+      const body = (await r.json()) as SessionResp
+      if (cancelled) return
+      sessionStorage.setItem('hive.sessionKey', body.sessionKey)
+      setSessionKey(body.sessionKey)
+    })().catch((err) => console.error('[useChatStream] session bootstrap failed:', err))
+    return () => { cancelled = true }
+  }, [])
+
+  // Open SSE once we have a session.
+  useEffect(() => {
+    if (!sessionKey) return
+    const url = `/api/chat-events?sessionKey=${encodeURIComponent(sessionKey)}`
+    const es = new EventSource(url, { withCredentials: true })
+    esRef.current = es
+    const onMessage = (m: MessageEvent) => {
+      try {
+        const parsed = JSON.parse(m.data) as ServerEvent
+        dispatch({ kind: 'event', event: parsed })
+      } catch (err) {
+        console.error('[useChatStream] bad event payload:', err)
+      }
+    }
+    es.addEventListener('message', onMessage)
+    es.addEventListener('error', () => {
+      // EventSource auto-reconnects with backoff. We don't need to do anything.
+    })
+    return () => {
+      es.removeEventListener('message', onMessage)
+      es.close()
+      esRef.current = null
+    }
+  }, [sessionKey])
+
+  const send = useCallback(async (text: string) => {
+    if (!sessionKey) throw new Error('session not ready')
+    if (!text.trim()) return
+    dispatch({ kind: 'user', text })
+    const r = await fetch('/api/send-stream', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionKey, message: text }),
+    })
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({})) as { error?: { message?: string } }
+      dispatch({ kind: 'event', event: { event: 'pi.error', data: { message: body.error?.message ?? `send failed (${r.status})` } } })
+    }
+  }, [sessionKey])
+
+  const reset = useCallback(() => dispatch({ kind: 'reset' }), [])
+
+  return { ...state, sessionKey, send, reset }
+}

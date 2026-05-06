@@ -63,10 +63,13 @@ describe('screen selection', () => {
   it('persists active screen on click', async () => {
     render(<App />)
     await flushAsync()
-    fireEvent.click(screen.getByTestId('sb-item-chat'))
+    // Pick a screen that's still a placeholder in this phase (Files is one
+    // of the four PREVIEW screens — guaranteed to keep its placeholder
+    // testid until phase 8).
+    fireEvent.click(screen.getByTestId('sb-item-files'))
     await flushAsync()
-    expect(localStorage.getItem('hive.activeScreen')).toBe('chat')
-    expect(screen.getByTestId('screen-chat')).toBeInTheDocument()
+    expect(localStorage.getItem('hive.activeScreen')).toBe('files')
+    expect(screen.getByTestId('screen-files')).toBeInTheDocument()
   })
 
   it('preview screens render the PREVIEW badge', async () => {
