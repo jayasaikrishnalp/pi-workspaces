@@ -52,6 +52,19 @@ if [ -d "$EXT_SRC" ]; then
   fi
 fi
 
+# Sync workspace skills into pi's GLOBAL skill dir (~/.pi/agent/skills/) so the
+# `pi --mode rpc` child sees them in <available_skills> regardless of its cwd.
+# Pi spawns from $HOME, not the workspace root, so per-cwd .pi/skills/ would
+# never be reached. Idempotent — replaces the dir each boot to track the repo.
+SKILLS_SRC="$REPO_ROOT/seed-skills/skills"
+SKILLS_DEST="$HOME/.pi/agent/skills"
+if [ -d "$SKILLS_SRC" ]; then
+  mkdir -p "$(dirname "$SKILLS_DEST")"
+  rm -rf "$SKILLS_DEST"
+  cp -RL "$SKILLS_SRC" "$SKILLS_DEST"
+  echo "[start] synced $(ls "$SKILLS_DEST" | wc -l | tr -d ' ') skills to $SKILLS_DEST"
+fi
+
 # REF_API_KEY: backend lifts from ~/.claude.json automatically; no prompt needed.
 # Operator override: export REF_API_KEY=... before running this script.
 
