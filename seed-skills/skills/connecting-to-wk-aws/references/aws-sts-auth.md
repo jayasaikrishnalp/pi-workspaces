@@ -21,7 +21,8 @@ aws sts assume-role \
 
 - **Table**: `WK-FedRoles`
 - **Region**: `us-east-1`
-- **Master Account**: `835377776149`
+- **Master Account**: `<MASTER_ACCOUNT_ID>` — resolve at runtime via
+  `aws sts get-caller-identity --profile WK-PROFILE`
 - **Partition Key**: `AccountFedRole` (format: `{AccountNumber}-WKFedRoles-{RoleType}`)
 
 ### Lookup by Account

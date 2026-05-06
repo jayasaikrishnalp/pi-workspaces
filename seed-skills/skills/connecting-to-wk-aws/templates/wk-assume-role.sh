@@ -6,13 +6,13 @@
 #   source wk-assume-role.sh <ACCOUNT_NUMBER> [ROLE_TYPE]
 #
 # Arguments:
-#   ACCOUNT_NUMBER  - 12-digit AWS account ID (e.g., 913524925851)
+#   ACCOUNT_NUMBER  - 12-digit AWS account ID (e.g., 123456789012)
 #   ROLE_TYPE       - Optional: Operations (default), Admin, Read, Billing, DNS, Architect
 #
 # Examples:
-#   source wk-assume-role.sh 913524925851                  # Assumes Operations role
-#   source wk-assume-role.sh 913524925851 Admin            # Assumes Admin role
-#   source wk-assume-role.sh 913524925851 Read             # Assumes Read-only role
+#   source wk-assume-role.sh 123456789012                  # Assumes Operations role
+#   source wk-assume-role.sh 123456789012 Admin            # Assumes Admin role
+#   source wk-assume-role.sh 123456789012 Read             # Assumes Read-only role
 #
 # After sourcing, AWS CLI commands will use the assumed role credentials.
 # ============================================================================

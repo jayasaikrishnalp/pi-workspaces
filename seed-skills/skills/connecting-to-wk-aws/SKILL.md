@@ -10,21 +10,23 @@ This skill handles federated role assumption into any Wolter Kluwer (WK) AWS acc
 ## Architecture
 
 ```
-Master Account (835377776149)          Target WK Account
-┌─────────────────────────┐           ┌──────────────────────┐
-│  ~/.aws/credentials     │           │                      │
-│  [WK-PROFILE]           │──STS──►   │  WKFedRoles-*-XXXXX  │
-│  AKIA4FADFIYKY5GPBHOA   │ assume    │  (IAM Roles)         │
-│                         │  role     │                      │
-│  DynamoDB: WK-FedRoles  │           └──────────────────────┘
+Master Account (<MASTER_ACCOUNT_ID>)   Target WK Account
+┌─────────────────────────┐            ┌──────────────────────┐
+│  ~/.aws/credentials     │            │                      │
+│  [WK-PROFILE]           │──STS──►    │  WKFedRoles-*-XXXXX  │
+│  <AWS_ACCESS_KEY_ID>    │ assume     │  (IAM Roles)         │
+│                         │  role      │                      │
+│  DynamoDB: WK-FedRoles  │            └──────────────────────┘
 │  (role lookup table)    │
 └─────────────────────────┘
 ```
 
 ## Configuration
 
-- **AWS Profile**: `WK-PROFILE` (in `~/.aws/credentials`)
-- **Master Account**: `835377776149`
+- **AWS Profile**: `WK-PROFILE` (in `~/.aws/credentials`) — credentials provided
+  out-of-band by the operator (or via the Hive secret store once available)
+- **Master Account**: `<MASTER_ACCOUNT_ID>` — the account that owns the
+  `WK-FedRoles` table; resolve from `aws sts get-caller-identity --profile WK-PROFILE`
 - **DynamoDB Table**: `WK-FedRoles` (region: `us-east-1`)
 - **Default Region**: `us-east-1`
 - **Restore/Secondary Region**: `us-west-2`
@@ -35,10 +37,10 @@ Master Account (835377776149)          Target WK Account
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `AccountFedRole` | String (Partition Key) | `{AccountNumber}-WKFedRoles-{RoleType}` | `913524925851-WKFedRoles-Operations` |
-| `AccountNumber` | String | 12-digit AWS account ID | `913524925851` |
-| `RoleName` | String | IAM role name with unique suffix | `WKFedRoles-Operations-k0wgMw2MbVLL` |
-| `ARN` | String | Full IAM role ARN | `arn:aws:iam::913524925851:role/WKFedRoles-Operations-k0wgMw2MbVLL` |
+| `AccountFedRole` | String (Partition Key) | `{AccountNumber}-WKFedRoles-{RoleType}` | `<ACCOUNT_ID>-WKFedRoles-Operations` |
+| `AccountNumber` | String | 12-digit AWS account ID | `<ACCOUNT_ID>` |
+| `RoleName` | String | IAM role name with unique suffix | `WKFedRoles-Operations-<UNIQUE_SUFFIX>` |
+| `ARN` | String | Full IAM role ARN | `arn:aws:iam::<ACCOUNT_ID>:role/WKFedRoles-Operations-<UNIQUE_SUFFIX>` |
 
 ## Available Role Types
 

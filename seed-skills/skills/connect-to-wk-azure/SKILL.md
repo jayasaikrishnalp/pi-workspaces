@@ -31,9 +31,13 @@ This skill handles service principal authentication into any Wolter Kluwer (WK) 
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `ARM_CLIENT_ID` | Service Principal app/client ID | `158b0a7e-4cfd-4139-b8a4-5c1ef8957dab` |
-| `ARM_CLIENT_SECRET` | Service Principal client secret | `gNN8Q~SPp.XLGC...` |
-| `ARM_TENANT_ID` | Azure AD tenant ID | `8ac76c91-e7f1-41ff-a89c-3553b2da2c17` |
+| `ARM_CLIENT_ID` | Service Principal app/client ID | `00000000-0000-0000-0000-000000000000` |
+| `ARM_CLIENT_SECRET` | Service Principal client secret | `<CLIENT_SECRET>` |
+| `ARM_TENANT_ID` | Azure AD tenant ID | `00000000-0000-0000-0000-000000000000` |
+
+> **Note:** The values above are placeholders. The operator provisions real
+> values in `~/.azure/.env` out-of-band, or — once available — via the Hive
+> secret store under the `azure.*` prefix.
 
 ## Connection Workflow
 

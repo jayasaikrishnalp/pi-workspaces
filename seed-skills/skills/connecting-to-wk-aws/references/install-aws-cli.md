@@ -62,8 +62,8 @@ which aws        # expect: /usr/local/bin/aws or /opt/homebrew/bin/aws
 
 The skill expects:
 - `~/.aws/credentials` to contain a `[WK-PROFILE]` section pointing at the
-  master account (835377776149). The Hive secret store can populate this via
-  the `aws.*` secret prefix.
+  master account (provided out-of-band by the operator). The Hive secret store
+  can populate this via the `aws.*` secret prefix.
 - `python3` available (used for JSON parsing in the helper script).
 
 If `aws sts get-caller-identity` returns an error with valid credentials
