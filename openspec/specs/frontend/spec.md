@@ -2,112 +2,132 @@
 
 ## Purpose
 
-Vite + Lit + Tailwind v4 single-page frontend that wraps the workspace API into the operator-facing experience: chat with pi, watch the KB grow, save Confluence answers as permanent skills. Hash routing covers the four surfaces (chat, skill detail, KB graph, Confluence panel). Auth is cookie-gated against the workspace's dev-token issued at login.
+React 18 + Vite + TypeScript SPA at web/ that renders a Hermes-style sidebar workspace shell over the cloudops-workspace backend. 15 screens (11 wired, 4 PREVIEW stubs), four overlays (command palette, shortcuts, settings, save-skill), 5 vibes (default + terminal/sre/calm/cyber), live data through SSE channels (/api/chat-events, /api/kb/events). All component code references CSS variables only — visual identity swaps by replacing tokens.css. Tests: Vitest for component-local logic, Playwright for browser-level E2E with a per-suite spawned backend.
 
 ## Requirements
 
-### Requirement: Single-Page Frontend
+### Requirement: Workspace Shell Layout
 
-The system SHALL provide a Vite-built single-page frontend in `web/` that runs entirely from `web/dist/`. The page is browser-only — it MUST NOT depend on a server-side render or framework runtime beyond Vite's built JS.
+The web frontend SHALL render a Hermes-style sidebar shell:
 
-#### Scenario: web/dist/index.html opens in any modern browser
+- A 36px titlebar with crumbs, ⌘K search button, bell, help, settings.
+- A collapsible left sidebar (default 220px wide, collapsed 52px) with three groups: MAIN (Dashboard / Chat / Files / Terminal / Jobs / Tasks / Conductor / Operations / Swarm), KNOWLEDGE (Graph / Memory / Skills / Confluence / MCP / Souls), SESSIONS (recent + "All sessions →"). Footer holds the user pill + settings/theme icon buttons.
+- A main content area that swaps screens based on the sidebar selection.
+- A 24px statusbar showing model, counts (skills, runs), heartbeat, version.
 
-- **GIVEN** the operator runs `cd web && npm run build`
-- **WHEN** they open `web/dist/index.html` directly OR via any static server
-- **THEN** the page renders without server-side dependencies
-- **AND** the only network calls go to `/api/*` on a configured workspace base URL
+The active screen, sidebar-collapsed bool, and current vibe MUST persist to `localStorage` so reloads restore state.
 
-### Requirement: Token Login Flow
+#### Scenario: Sidebar collapses on click
 
-The system SHALL prompt the operator for the dev token on first visit when `GET /api/auth/check` returns `401`. Successful login (cookie-issuing 200) MUST hide the prompt and reveal the chat surface.
+- **GIVEN** the workspace is open and the sidebar is in its default expanded state
+- **WHEN** the user clicks the collapse button
+- **THEN** the sidebar shrinks to its icon-only width
+- **AND** localStorage records the new collapsed state
+- **AND** reloading the page restores the collapsed state
 
-#### Scenario: Unauthed user sees the token prompt
+#### Scenario: Selecting a sidebar item swaps the main content
 
-- **GIVEN** a fresh browser with no `workspace_session` cookie
-- **WHEN** the page loads and probes `GET /api/auth/check`
-- **THEN** the page shows a "Paste dev token to continue" form
-- **AND** the chat pane is not visible
+- **GIVEN** the workspace is on Dashboard
+- **WHEN** the user clicks the "Chat" item in MAIN
+- **THEN** the chat screen replaces the dashboard
+- **AND** the sidebar's "Chat" item gets the active style
 
-#### Scenario: Successful login reveals the chat surface
+### Requirement: Live Probe Banner
 
-- **GIVEN** the operator pastes a valid token
-- **WHEN** `POST /api/auth/login` returns 200
-- **THEN** the chat pane is visible
-- **AND** the skills sidebar starts loading via `GET /api/kb/graph`
+The system SHALL display a probe banner above the main content (toggleable in Settings) that surfaces the workspace health from `GET /api/probe`. Fields shown: pi (ok + version + active model), confluence (configured), mcp (per-server status pill), counts (skills / agents / souls / jobs).
 
-### Requirement: Chat Pane
+#### Scenario: Probe banner reflects backend probe data
 
-The system SHALL provide a `<chat-pane>` Lit component that:
+- **GIVEN** the backend reports `pi.ok=true`, `pi.version="0.73.0"`, `confluence.configured=true`, `souls.count=3`
+- **WHEN** the user opens the workspace
+- **THEN** the probe banner shows `pi 0.73.0 ✓`, `confluence ✓`, `souls 3`
+- **AND** the underlying GET /api/probe was made exactly once on initial render
 
-- Lazily creates a session via `POST /api/sessions` on the first user submission and remembers `sessionKey`.
-- Submits each prompt via `POST /api/send-stream`, then opens `GET /api/runs/:runId/events?afterSeq=0` as an `EventSource`.
-- Renders streaming `assistant.delta` events into a single growing message bubble.
-- Renders `tool.call.start/end` and `tool.result` as compact, collapsed-by-default panels under the assistant message.
-- Closes the EventSource on `run.completed`.
+### Requirement: 15 Screens, 11 Wired + 4 Preview Stubs
 
-#### Scenario: A prompt produces a streaming bubble
+The shell SHALL include 15 screens. 11 of them MUST render live data:
 
-- **GIVEN** the operator is logged in and has typed "say hi"
-- **WHEN** they submit
-- **THEN** the chat pane shows a "user: say hi" bubble immediately
-- **AND** within the next several seconds, an "assistant" bubble appears whose text grows as `assistant.delta` events arrive
-- **AND** when `run.completed` is observed, the EventSource is closed
+- Dashboard (probe + counts + recent jobs + recent tasks)
+- Chat (sessions + send-stream + chat-events)
+- Knowledge Graph (kb/graph + kb/events)
+- Memory (CRUD via /api/memory)
+- Skills (CRUD via /api/skills)
+- Souls (CRUD via /api/souls)
+- Confluence (search + page)
+- MCP (servers + tools)
+- Jobs (list + cancel)
+- Tasks (kanban CRUD)
+- Terminal (exec + audit log)
+- Sessions (list + active-run)
 
-#### Scenario: A second submission while a run is active is blocked at the UI
+4 screens MUST render with hardcoded mock data plus a "PREVIEW" badge:
 
-- **GIVEN** a prompt is in flight (no `run.completed` yet)
-- **WHEN** the operator tries to submit a second prompt
-- **THEN** the input is disabled and a "still running…" hint is shown
-- **AND** no second `POST /api/send-stream` is issued
+- Swarm, Conductor, Operations, Files
 
-### Requirement: Skills Sidebar
+#### Scenario: Wired screen renders live data
 
-The system SHALL provide a `<skills-sidebar>` component that lists every skill returned by `GET /api/kb/graph` and re-fetches when `kb.changed` arrives on `GET /api/kb/events`.
+- **GIVEN** the backend has 5 souls in `<kbRoot>/souls/`
+- **WHEN** the user navigates to the Souls screen
+- **THEN** the screen lists exactly those 5 souls
+- **AND** each entry shows the soul's name and description from its frontmatter
 
-#### Scenario: New skill appears within 1500ms of being written
+#### Scenario: Preview screen surfaces a "PREVIEW" badge
 
-- **GIVEN** the sidebar is mounted with five skills
-- **WHEN** the workspace `POST /api/skills` writes a new skill
-- **THEN** within 1500ms the sidebar shows six skills
+- **WHEN** the user navigates to the Swarm screen
+- **THEN** the screen renders with mock data
+- **AND** a PREVIEW badge is visible in the page header
 
-### Requirement: Probe Banner
+### Requirement: Command Palette And Shortcuts Overlay
 
-The system SHALL render a top banner reflecting the latest `GET /api/probe` response with traffic-light states for pi, Confluence, and skills count. Re-poll on `visibilitychange` to "visible".
+The system SHALL expose `⌘K` to open a command palette that fuzzy-filters across screen names + a slice of FTS5 search hits, and `?` to open a keyboard shortcuts reference overlay. Both close on Escape.
 
-#### Scenario: Banner reflects probe state
+#### Scenario: ⌘K opens the palette
 
-- **GIVEN** `GET /api/probe` returns `{pi:{ok:true}, confluence:{configured:false, ...}, skills:{count:5}}`
-- **WHEN** the page loads
-- **THEN** the banner shows pi=green, confluence=amber/red, skills=5
+- **GIVEN** the user is on the Dashboard
+- **WHEN** the user presses `⌘K` (or `Ctrl+K` on non-Mac)
+- **THEN** the command palette opens with focus on the input
+- **AND** typing "skills" shows a "Go to Skills" entry
 
-### Requirement: Hash Routing
+### Requirement: Save-As-Skill Hero Animation
 
-The system SHALL support `#/` (chat) and `#/skill/<name>` (read a skill body via `GET /api/kb/skill/:name`). Routes are hash-fragment only.
+When the user clicks "Save as skill" on a chat message, the system SHALL:
 
-#### Scenario: Navigating to a skill route loads the body
+1. Open the SaveSkillModal pre-filled with a candidate name + body.
+2. On confirm, `POST /api/skills` with the content.
+3. On 201, switch to the Knowledge Graph screen.
+4. Subscribe to `/api/kb/events`; on the matching `add` event, render the new hex with a `hex-pop` keyframe animation and a particle burst at the screen position.
+5. Show a toast: "Skill saved · `<name>` written to `<path>`".
 
-- **WHEN** the page navigates to `#/skill/reboot-server`
-- **THEN** the chat pane is replaced by a panel showing the skill body rendered from markdown
-- **AND** a "back to chat" link returns to `#/`
+#### Scenario: Save-as-skill end-to-end
 
-### Requirement: KB Graph
+- **GIVEN** a chat message with a "Save as skill" button
+- **WHEN** the user clicks it, fills the modal with name "test-skill", and confirms
+- **THEN** within ~2 seconds the user sees the Graph screen with a new hex labeled "test-skill"
+- **AND** a toast banner is visible
+- **AND** `GET /api/skills` shows the new skill
 
-The system SHALL render a D3-force-layout SVG graph at `#/graph` with one node per skill and edges for `uses` (solid) / `link` (dashed). Clicking a node navigates to that skill's detail page. The graph SHALL re-render when the skills list changes, including when a new skill is added via `kb.changed`.
+### Requirement: 4 Vibes Plus Default
 
-#### Scenario: Adding a skill grows the graph
+The system SHALL ship 5 visual vibes — default ("on-system" KodeKloud blue), terminal (CRT phosphor), sre (Datadog-ish), calm (high-whitespace), cyber (HUD). The Settings overlay's Theme picker MUST switch the active vibe by toggling a `vibe-*` class on the body element. Components MUST NOT use hex literals; styling references CSS variables only so the third-party token swap requires no component changes.
 
-- **GIVEN** the operator is on `#/graph` with N skills visible
-- **WHEN** a new SKILL.md is written to disk
-- **THEN** within 1500ms the graph displays N+1 nodes
-- **AND** clicking the new node navigates to `#/skill/<new-name>`
+#### Scenario: Switching vibe applies new tokens immediately
 
-### Requirement: Confluence Panel
+- **GIVEN** the workspace is in default vibe
+- **WHEN** the user opens Settings → Theme → "terminal"
+- **THEN** the body has class `vibe-terminal`
+- **AND** the accent color visibly switches to phosphor green
 
-The system SHALL render a Confluence search-and-read panel at `#/confluence` with a query input, a results list, and a reader pane that loads page content via `GET /api/confluence/page/:pageId`.
+### Requirement: Browser Test Harness
 
-#### Scenario: Search shows hits and click loads page
+The frontend SHALL ship Playwright E2E tests covering each phase's critical flow. Tests boot the backend in a child process pointing at a tmp workspace dir, open chromium, exercise the UI, and assert via DOM locators. Vitest covers component-local logic (reducers, hex-layout math, parsers).
 
-- **GIVEN** the operator is on `#/confluence`
-- **WHEN** they search a non-empty query
-- **THEN** the results list shows zero or more hits with title and snippet
-- **AND** clicking a hit fetches `GET /api/confluence/page/<id>` and renders the sanitized content
+#### Scenario: Phase test suite is wired into npm
+
+- **WHEN** a developer runs `npm run test:web`
+- **THEN** Vitest runs all `web/test/unit/*.test.ts` and reports pass/fail counts
+
+#### Scenario: E2E suite runs deterministically
+
+- **WHEN** a developer runs `npm run test:web:e2e`
+- **THEN** Playwright launches chromium, runs all `web/test/e2e/*.spec.ts`, each booting its own backend
+- **AND** the suite completes in under 90 seconds on a baseline M1
