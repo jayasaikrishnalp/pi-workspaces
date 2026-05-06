@@ -25,7 +25,7 @@ This skill handles service principal authentication into any Wolter Kluwer (WK) 
 - **Auth Method**: Service Principal (client ID + client secret)
 - **Tenant ID**: Stored in `.env` file
 - **Helper Script**: `templates/wk-azure-login.sh`
-- **Reference Docs**: `references/azure-sp-auth.md`
+- **Reference Docs**: `references/azure-sp-auth.md`, `references/install-azure-cli.md`
 
 ## .env File Schema
 
@@ -36,6 +36,36 @@ This skill handles service principal authentication into any Wolter Kluwer (WK) 
 | `ARM_TENANT_ID` | Azure AD tenant ID | `8ac76c91-e7f1-41ff-a89c-3553b2da2c17` |
 
 ## Connection Workflow
+
+### Step 0: Ensure Azure CLI Is Installed
+
+Before any other step, verify the `az` binary is on `$PATH`. Install it
+non-interactively if missing. Full per-OS install matrix lives in
+`references/install-azure-cli.md`.
+
+```bash
+if ! command -v az >/dev/null 2>&1; then
+  echo "[wk-azure] Azure CLI not found — installing..."
+  if [ "$(uname -s)" = "Darwin" ]; then
+    brew update && brew install azure-cli
+  elif [ -f /etc/debian_version ]; then
+    curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+  elif [ -f /etc/redhat-release ] || [ -f /etc/system-release ]; then
+    sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+    sudo dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm 2>/dev/null \
+      || sudo yum install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm
+    sudo dnf install -y azure-cli || sudo yum install -y azure-cli
+  else
+    echo "[wk-azure] unsupported OS — see references/install-azure-cli.md"
+    exit 1
+  fi
+fi
+az --version
+```
+
+The helper script `templates/wk-azure-login.sh` runs this check at the top, so
+sourcing it covers Step 0 automatically. Run Step 0 manually first only when
+*not* using the helper script.
 
 ### Step 1: Login and Set Subscription (Single Bash Call)
 
@@ -117,7 +147,7 @@ az aks list --output table
 | `AADSTS700016` | Client ID not found in tenant | Verify `ARM_CLIENT_ID` and `ARM_TENANT_ID` in `.env` |
 | `SubscriptionNotFound` | SP lacks access to subscription | Grant SP access in Azure portal or use correct subscription ID |
 | `Credentials file not found` | Missing `~/.azure/.env` | Create the file with required variables |
-| `az: command not found` | Azure CLI not installed | Install via `brew install azure-cli` |
+| `az: command not found` | Azure CLI not installed | Run **Step 0** above; details in `references/install-azure-cli.md` |
 
 ## Important Notes
 

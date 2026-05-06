@@ -17,6 +17,35 @@
 
 set -euo pipefail
 
+# --- Step 0: Ensure Azure CLI is installed --------------------------------
+# Idempotent: no-op when `az` is already on PATH. Full install matrix in
+# references/install-azure-cli.md. Designed to be safe to re-source.
+if ! command -v az >/dev/null 2>&1; then
+    echo "[wk-azure] Azure CLI not found — installing..."
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        if command -v brew >/dev/null 2>&1; then
+            brew update && brew install azure-cli
+        else
+            echo "ERROR: Homebrew not found on macOS — install brew, then re-run."
+            return 1 2>/dev/null || exit 1
+        fi
+    elif [[ -f /etc/debian_version ]]; then
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+    elif [[ -f /etc/redhat-release || -f /etc/system-release ]]; then
+        sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+        if command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm
+            sudo dnf install -y azure-cli
+        else
+            sudo yum install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm
+            sudo yum install -y azure-cli
+        fi
+    else
+        echo "ERROR: unsupported OS — see references/install-azure-cli.md"
+        return 1 2>/dev/null || exit 1
+    fi
+fi
+
 # --- Configuration ---
 ENV_FILE="$HOME/.azure/.env"
 

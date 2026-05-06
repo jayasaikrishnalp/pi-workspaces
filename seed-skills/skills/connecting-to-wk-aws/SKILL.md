@@ -29,7 +29,7 @@ Master Account (835377776149)          Target WK Account
 - **Default Region**: `us-east-1`
 - **Restore/Secondary Region**: `us-west-2`
 - **Helper Script**: `templates/wk-assume-role.sh`
-- **Reference Docs**: `references/aws-sts-auth.md`
+- **Reference Docs**: `references/aws-sts-auth.md`, `references/install-aws-cli.md`
 
 ## WK-FedRoles Table Schema
 
@@ -52,6 +52,39 @@ Master Account (835377776149)          Target WK Account
 | **DNS** | Route53 and DNS management | DNS record changes, hosted zone management |
 
 ## Connection Workflow
+
+### Step 0: Ensure AWS CLI Is Installed
+
+Before any other step, verify the AWS CLI v2 is on `$PATH`. Install it
+non-interactively if missing. Full per-OS install matrix lives in
+`references/install-aws-cli.md`.
+
+```bash
+if ! command -v aws >/dev/null 2>&1; then
+  echo "[wk-aws] AWS CLI not found — installing..."
+  if [ "$(uname -s)" = "Darwin" ]; then
+    brew install awscli
+  elif [ -f /etc/debian_version ]; then
+    sudo apt-get update -qq && sudo apt-get install -y -qq curl unzip
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+    unzip -q -o /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install --update
+    rm -rf /tmp/aws /tmp/awscliv2.zip
+  elif [ -f /etc/redhat-release ] || [ -f /etc/system-release ]; then
+    sudo yum install -y -q unzip curl
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+    unzip -q -o /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install --update
+    rm -rf /tmp/aws /tmp/awscliv2.zip
+  else
+    echo "[wk-aws] unsupported OS — see references/install-aws-cli.md"
+    exit 1
+  fi
+fi
+aws --version
+```
+
+The helper script `templates/wk-assume-role.sh` runs this check at the top, so
+sourcing it covers Step 0 automatically. Run Step 0 manually first only when
+*not* using the helper script.
 
 ### Step 1: Look Up Roles for the Target Account
 
@@ -134,6 +167,7 @@ done
 
 | Error | Cause | Fix |
 |-------|-------|-----|
+| `aws: command not found` | AWS CLI not installed | Run **Step 0** above; details in `references/install-aws-cli.md` |
 | `ExpiredTokenException` | STS session expired | Re-assume the role |
 | `AccessDenied` on assume-role | WK-PROFILE creds invalid | Check `~/.aws/credentials` [WK-PROFILE] |
 | `AccessDenied` on operation | Role lacks permission | Try **Admin** role instead of **Operations** |

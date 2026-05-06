@@ -19,6 +19,35 @@
 
 set -euo pipefail
 
+# --- Step 0: Ensure AWS CLI v2 is installed -------------------------------
+# Idempotent: no-op when `aws` is already on PATH. Full install matrix in
+# references/install-aws-cli.md. Designed to be safe to re-source.
+if ! command -v aws >/dev/null 2>&1; then
+    echo "[wk-aws] AWS CLI not found — installing..."
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        if command -v brew >/dev/null 2>&1; then
+            brew install awscli
+        else
+            curl -fsSL "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o /tmp/AWSCLIV2.pkg
+            sudo installer -pkg /tmp/AWSCLIV2.pkg -target /
+            rm -f /tmp/AWSCLIV2.pkg
+        fi
+    elif [[ -f /etc/debian_version ]]; then
+        sudo apt-get update -qq && sudo apt-get install -y -qq curl unzip
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+        unzip -q -o /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install --update
+        rm -rf /tmp/aws /tmp/awscliv2.zip
+    elif [[ -f /etc/redhat-release || -f /etc/system-release ]]; then
+        sudo yum install -y -q unzip curl
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+        unzip -q -o /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install --update
+        rm -rf /tmp/aws /tmp/awscliv2.zip
+    else
+        echo "ERROR: unsupported OS — see references/install-aws-cli.md"
+        return 1 2>/dev/null || exit 1
+    fi
+fi
+
 # --- Configuration ---
 WK_PROFILE="WK-PROFILE"
 WK_REGION="us-east-1"
