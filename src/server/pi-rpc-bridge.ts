@@ -45,6 +45,10 @@ export class PiRpcBridge {
   private restartAttempt = 0
   private deps: BridgeDeps
   private terminated = false
+  /** sessionKey of the most-recent send. When the next send's sessionKey
+   *  differs, we tell pi to start a fresh conversation via new_session RPC.
+   *  Reset to null whenever the pi child dies (a fresh child = fresh state). */
+  private lastSessionKey: string | null = null
 
   constructor(deps: BridgeDeps) {
     this.deps = deps
@@ -74,6 +78,20 @@ export class PiRpcBridge {
       completed,
       resolveCompleted,
     }
+
+    // F5: when the Hive sessionKey changes, tell pi to start a fresh
+    // conversation BEFORE the prompt. Pi's --mode rpc keeps in-memory state
+    // across prompts in a single child; without this, "+ New Session" in
+    // Hive would never reset pi's context. The new_session RPC is documented
+    // in pi-mono/packages/coding-agent/src/modes/rpc/rpc-types.ts.
+    if (this.lastSessionKey !== null && this.lastSessionKey !== args.sessionKey) {
+      const resetCmd = JSON.stringify({
+        id: `new-session-${args.runId}`,
+        type: 'new_session',
+      })
+      this.child!.stdin!.write(resetCmd + '\n')
+    }
+    this.lastSessionKey = args.sessionKey
 
     const command = JSON.stringify({
       id: args.runId,
@@ -352,6 +370,9 @@ export class PiRpcBridge {
   private async onExit(code: number | null, signal: NodeJS.Signals | null): Promise<void> {
     const wasActive = this.active
     this.child = null
+    // Fresh child gets fresh state; the next send shouldn't think it owes pi
+    // a new_session for the previous owner's sessionKey.
+    this.lastSessionKey = null
 
     if (wasActive && !wasActive.terminalized) {
       await this.terminalize(

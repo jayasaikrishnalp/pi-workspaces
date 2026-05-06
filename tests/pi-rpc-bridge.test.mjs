@@ -645,3 +645,77 @@ test('after a clean run, a fresh send works for a new runId', async () => {
 
   assert.equal(await ctx.runStore.getStatus('r2'), 'success')
 })
+
+// ---- F5: per-session pi reset ---------------------------------------------
+
+test('switching sessionKey between sends emits a new_session RPC to pi before the next prompt', async () => {
+  const ctx = await makeBridge()
+
+  // First run on session A.
+  ctx.tracker.start('sessA', 'r1')
+  await startRunOnDisk(ctx.runStore, 'r1', 'sessA', 'hi from A')
+  const done1 = waitForEvent(ctx.bus, 'run.completed')
+  await ctx.bridge.send({ sessionKey: 'sessA', runId: 'r1', prompt: 'hi from A' })
+  const fake = ctx.getFake()
+  fake.pushJson({ id: 'r1', type: 'response', command: 'prompt', success: true })
+  fake.pushJson({ type: 'agent_start' })
+  fake.pushJson({ type: 'agent_end', messages: [] })
+  await done1
+
+  // Second run on a different session — this is "+ New Session" in Hive.
+  ctx.tracker.start('sessB', 'r2')
+  await startRunOnDisk(ctx.runStore, 'r2', 'sessB', 'hi from B')
+  const done2 = waitForEvent(ctx.bus, 'run.completed')
+  await ctx.bridge.send({ sessionKey: 'sessB', runId: 'r2', prompt: 'hi from B' })
+
+  // Three commands should have hit pi's stdin in order:
+  //   [0] prompt id=r1 message="hi from A"
+  //   [1] new_session                       ← session changed sessA → sessB
+  //   [2] prompt id=r2 message="hi from B"
+  const cmds = fake.linesIn.map((l) => JSON.parse(l))
+  assert.equal(cmds.length, 3, `expected 3 stdin commands, got ${cmds.length}: ${JSON.stringify(cmds)}`)
+  assert.equal(cmds[0].type, 'prompt')
+  assert.equal(cmds[0].message, 'hi from A')
+  assert.equal(cmds[1].type, 'new_session', 'second command must be new_session before a different-session prompt')
+  assert.equal(cmds[2].type, 'prompt')
+  assert.equal(cmds[2].message, 'hi from B')
+
+  // Pi acks the new_session and the prompt; we ack each in turn.
+  fake.pushJson({ id: cmds[1].id ?? 'ns', type: 'response', command: 'new_session', success: true, data: { cancelled: false } })
+  fake.pushJson({ id: 'r2', type: 'response', command: 'prompt', success: true })
+  fake.pushJson({ type: 'agent_start' })
+  fake.pushJson({ type: 'agent_end', messages: [] })
+  await done2
+
+  assert.equal(await ctx.runStore.getStatus('r2'), 'success')
+})
+
+test('same sessionKey on consecutive sends does NOT emit new_session', async () => {
+  const ctx = await makeBridge()
+
+  ctx.tracker.start('sessA', 'r1')
+  await startRunOnDisk(ctx.runStore, 'r1', 'sessA', 'a1')
+  const done1 = waitForEvent(ctx.bus, 'run.completed')
+  await ctx.bridge.send({ sessionKey: 'sessA', runId: 'r1', prompt: 'a1' })
+  const fake = ctx.getFake()
+  fake.pushJson({ id: 'r1', type: 'response', command: 'prompt', success: true })
+  fake.pushJson({ type: 'agent_start' })
+  fake.pushJson({ type: 'agent_end', messages: [] })
+  await done1
+
+  ctx.tracker.start('sessA', 'r2')
+  await startRunOnDisk(ctx.runStore, 'r2', 'sessA', 'a2')
+  const done2 = waitForEvent(ctx.bus, 'run.completed')
+  await ctx.bridge.send({ sessionKey: 'sessA', runId: 'r2', prompt: 'a2' })
+
+  const cmds = fake.linesIn.map((l) => JSON.parse(l))
+  assert.equal(cmds.length, 2, `same-session continuation should NOT emit new_session, got ${cmds.length} cmds`)
+  for (const c of cmds) {
+    assert.notEqual(c.type, 'new_session', `unexpected new_session in same-session flow: ${JSON.stringify(c)}`)
+  }
+
+  fake.pushJson({ id: 'r2', type: 'response', command: 'prompt', success: true })
+  fake.pushJson({ type: 'agent_start' })
+  fake.pushJson({ type: 'agent_end', messages: [] })
+  await done2
+})
