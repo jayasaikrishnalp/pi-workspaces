@@ -44,6 +44,8 @@ export interface Wiring {
   workspaceRoot: string
   /** Spawn callback for `pi`. Override in tests; defaults to spawning `pi`. */
   spawnPi: SpawnPi
+  /** Spawn callback for the terminal command runner. Defaults to /bin/bash. */
+  spawnBash?: SpawnPi
   /** MCP client pool. Lazy-connects per server on first use. */
   mcpBroker: McpBroker
   /** SQLite handle for jobs / tasks / FTS5 / chat_messages. Tests may omit it. */
@@ -130,6 +132,8 @@ export function getWiring(options: WiringOptions = {}): Wiring {
 
   const authStore = getAuthStore({ workspaceRoot: root })
   const spawnPi: SpawnPi = options.spawnPi ?? ((args, opts) => spawn('pi', [...args], opts ?? {}))
+  const bashPath = process.env.PI_WORKSPACE_BASH_PATH ?? '/bin/bash'
+  const spawnBash: SpawnPi = (args, opts) => spawn(bashPath, [...args], opts ?? {})
 
   const mcpBroker = new McpBroker(loadSeedConfig())
   const db = openDb(path.join(root, 'data.sqlite'))
@@ -168,7 +172,7 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     kbRoot, skillsDir, agentsDir, workflowsDir, memoryDir,
     watcher,
     confluence, confluenceConfigured, confluenceConfigError,
-    authStore, workspaceRoot: root, spawnPi, mcpBroker, db,
+    authStore, workspaceRoot: root, spawnPi, spawnBash, mcpBroker, db,
   }
   globalThis.__wiring = w
   void authStore.load().catch((err) => {

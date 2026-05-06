@@ -94,6 +94,10 @@ import {
   TASKS_PATH, TASKS_DETAIL_PATTERN,
 } from './routes/tasks.js'
 import {
+  handleTerminalExec, handleTerminalExecutionsList, handleTerminalExecutionsRead,
+  TERMINAL_EXEC_PATH, TERMINAL_EXECUTIONS_PATH, TERMINAL_EXECUTIONS_DETAIL_PATTERN,
+} from './routes/terminal.js'
+import {
   handleAuthLogin,
   handleAuthLogout,
   handleAuthCheck,
@@ -185,6 +189,11 @@ const ROUTES: Route[] = [
   { method: 'GET', pattern: TASKS_DETAIL_PATTERN, handler: handleTasksRead },
   { method: 'PUT', pattern: TASKS_DETAIL_PATTERN, handler: handleTasksUpdate },
   { method: 'DELETE', pattern: TASKS_DETAIL_PATTERN, handler: handleTasksDelete },
+
+  // Terminal — one-shot command runner with full audit log.
+  { method: 'POST', pattern: TERMINAL_EXEC_PATH, handler: handleTerminalExec },
+  { method: 'GET', pattern: TERMINAL_EXECUTIONS_PATH, handler: handleTerminalExecutionsList },
+  { method: 'GET', pattern: TERMINAL_EXECUTIONS_DETAIL_PATTERN, handler: handleTerminalExecutionsRead },
 
   // Stage 7 routes — auth + capability probe.
   { method: 'POST', pattern: AUTH_LOGIN_PATH, handler: handleAuthLogin },

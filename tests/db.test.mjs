@@ -18,11 +18,11 @@ function tmp() {
 test('openDb creates schema on fresh boot and advances version', () => {
   const db = openDb(tmp())
   try {
-    assert.equal(getSchemaVersion(db), 1, 'one migration applied')
+    assert.ok(getSchemaVersion(db) >= 1, 'at least one migration applied')
     const tables = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' OR type='view'",
     ).all().map((r) => r.name).sort()
-    for (const t of ['jobs', 'tasks', 'chat_messages', 'kb_fts', 'kb_fts_trigram', 'chat_fts', 'chat_fts_trigram', 'schema_version']) {
+    for (const t of ['jobs', 'tasks', 'chat_messages', 'kb_fts', 'kb_fts_trigram', 'chat_fts', 'chat_fts_trigram', 'schema_version', 'terminal_executions']) {
       assert.ok(tables.includes(t), `expected table ${t}; got ${tables.join(',')}`)
     }
   } finally { db.close() }

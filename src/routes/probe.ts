@@ -10,6 +10,7 @@ import { listMemory } from '../server/memory-writer.js'
 import { ProvidersClient } from '../server/providers-client.js'
 import { JobsStore } from '../server/jobs-store.js'
 import { TasksStore } from '../server/tasks-store.js'
+import { TerminalStore } from '../server/terminal-store.js'
 import { getSchemaVersion } from '../server/db.js'
 import type { Wiring } from '../server/wiring.js'
 
@@ -115,6 +116,7 @@ export async function handleProbe(
   let jobsCount = 0
   let tasksCount = 0
   let tasksByStatus: Record<string, number> = {}
+  let terminalCount = 0
   if (w.db) {
     try {
       const ver = getSchemaVersion(w.db)
@@ -123,6 +125,7 @@ export async function handleProbe(
       const tasks = new TasksStore(w.db)
       tasksCount = tasks.totalCount()
       tasksByStatus = tasks.countByStatus()
+      terminalCount = new TerminalStore(w.db).totalCount()
     } catch {
       dbInfo = { ok: false }
     }
@@ -149,6 +152,7 @@ export async function handleProbe(
     souls: { count: soulsCount },
     jobs: { count: jobsCount },
     tasks: { count: tasksCount, byStatus: tasksByStatus },
+    terminal: { count: terminalCount },
     db: dbInfo,
     mcp: { servers: w.mcpBroker?.getStatus?.() ?? [] },
     auth: { piAuthJsonPresent },
