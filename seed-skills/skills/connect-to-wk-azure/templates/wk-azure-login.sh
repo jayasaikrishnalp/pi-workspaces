@@ -46,20 +46,27 @@ if ! command -v az >/dev/null 2>&1; then
     fi
 fi
 
-# --- Configuration ---
+# --- Step 0.5: Resolve service principal credentials ----------------------
+# Prefer env vars (Hive Secret Store path). Fall back to ~/.azure/.env.
+# Bail loudly when neither is available.
 ENV_FILE="$HOME/.azure/.env"
 
-# --- Load credentials from .env ---
-if [[ ! -f "$ENV_FILE" ]]; then
-    echo "ERROR: Credentials file not found at $ENV_FILE"
-    return 1 2>/dev/null || exit 1
-fi
-
-source "$ENV_FILE"
-
-if [[ -z "${ARM_CLIENT_ID:-}" || -z "${ARM_CLIENT_SECRET:-}" || -z "${ARM_TENANT_ID:-}" ]]; then
-    echo "ERROR: Missing required variables in $ENV_FILE"
-    echo "Required: ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID"
+if [[ -n "${ARM_CLIENT_ID:-}" && -n "${ARM_CLIENT_SECRET:-}" && -n "${ARM_TENANT_ID:-}" ]]; then
+    echo "[wk-azure] using credentials from environment"
+elif [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+    if [[ -z "${ARM_CLIENT_ID:-}" || -z "${ARM_CLIENT_SECRET:-}" || -z "${ARM_TENANT_ID:-}" ]]; then
+        echo "ERROR: $ENV_FILE missing required ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID"
+        return 1 2>/dev/null || exit 1
+    fi
+    echo "[wk-azure] using legacy credentials from $ENV_FILE"
+else
+    echo "ERROR: no Azure service principal credentials available."
+    echo "  Set azure.client_id, azure.client_secret, azure.tenant_id in the Hive Secret Store,"
+    echo "  or create $ENV_FILE with ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID."
     return 1 2>/dev/null || exit 1
 fi
 

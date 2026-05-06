@@ -48,8 +48,22 @@ if ! command -v aws >/dev/null 2>&1; then
     fi
 fi
 
+# --- Step 0.5: Resolve master credentials ---------------------------------
+# Prefer env vars (Hive Secret Store path). Fall back to ~/.aws/credentials
+# [WK-PROFILE]. Bail loudly when neither is available.
+if [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+    echo "[wk-aws] using credentials from environment"
+elif [[ -f "$HOME/.aws/credentials" ]] && grep -q '^\[WK-PROFILE\]' "$HOME/.aws/credentials" 2>/dev/null; then
+    export AWS_PROFILE=WK-PROFILE
+    echo "[wk-aws] using legacy WK-PROFILE from ~/.aws/credentials"
+else
+    echo "ERROR: no AWS master credentials available."
+    echo "  Set aws.access_key_id and aws.secret_access_key in the Hive Secret Store,"
+    echo "  or create ~/.aws/credentials with a [WK-PROFILE] section."
+    return 1 2>/dev/null || exit 1
+fi
+
 # --- Configuration ---
-WK_PROFILE="WK-PROFILE"
 WK_REGION="us-east-1"
 FEDROLES_TABLE="WK-FedRoles"
 SESSION_NAME="wk-session"
@@ -81,7 +95,6 @@ echo "Looking up WKFedRoles-${ROLE_TYPE} for account ${ACCOUNT_NUMBER}..."
 ROLE_ARN=$(aws dynamodb get-item \
     --table-name "$FEDROLES_TABLE" \
     --key "{\"AccountFedRole\": {\"S\": \"${ACCOUNT_NUMBER}-WKFedRoles-${ROLE_TYPE}\"}}" \
-    --profile "$WK_PROFILE" \
     --region "$WK_REGION" \
     --query 'Item.ARN.S' \
     --output text 2>/dev/null)
@@ -94,7 +107,6 @@ if [[ -z "$ROLE_ARN" || "$ROLE_ARN" == "None" ]]; then
         --table-name "$FEDROLES_TABLE" \
         --filter-expression "AccountNumber = :acct" \
         --expression-attribute-values "{\":acct\": {\"S\": \"${ACCOUNT_NUMBER}\"}}" \
-        --profile "$WK_PROFILE" \
         --region "$WK_REGION" \
         --query 'Items[].AccountFedRole.S' \
         --output text 2>/dev/null || echo "  (could not retrieve roles)"
@@ -109,7 +121,6 @@ echo "Assuming role..."
 CREDS=$(aws sts assume-role \
     --role-arn "$ROLE_ARN" \
     --role-session-name "$SESSION_NAME" \
-    --profile "$WK_PROFILE" \
     --output json 2>&1)
 
 if [[ $? -ne 0 ]]; then

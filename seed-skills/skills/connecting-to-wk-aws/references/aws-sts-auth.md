@@ -2,20 +2,40 @@
 
 ## Authentication Method
 
+### Credential Source
+
+The AWS CLI follows its standard credential chain. In Hive, the **preferred**
+source is environment variables populated from the Secret Store under the
+`aws.*` prefix:
+
+| Hive secret key | Env var the CLI reads |
+|---|---|
+| `aws.access_key_id` | `AWS_ACCESS_KEY_ID` |
+| `aws.secret_access_key` | `AWS_SECRET_ACCESS_KEY` |
+| `aws.session_token` (optional) | `AWS_SESSION_TOKEN` |
+| `aws.region` | `AWS_DEFAULT_REGION` |
+
+When env vars are present, the CLI uses them automatically — no `--profile`
+flag is required (or wanted).
+
+The legacy fallback is a `[WK-PROFILE]` section in `~/.aws/credentials`.
+Activate it with `export AWS_PROFILE=WK-PROFILE`.
+
 ### STS Assume Role via Master Account
-Uses a master account profile (`WK-PROFILE`) to look up role ARNs in DynamoDB, then assumes the target role via STS.
+The master account creds (sourced as above) are used to look up role ARNs in
+DynamoDB, then assume the target role via STS.
 
 ```bash
 aws sts assume-role \
   --role-arn "arn:aws:iam::ACCOUNT_ID:role/ROLE_NAME" \
   --role-session-name wk-session \
-  --profile WK-PROFILE \
   --output json
 ```
 
 ### Token Lifetime
 - STS assumed role sessions: **1 hour** by default
-- Master account credentials (`WK-PROFILE`): long-lived IAM access keys in `~/.aws/credentials`
+- Master account credentials: rotated whenever the secret store entries are
+  updated. No expiry as long as the IAM keys remain active.
 
 ## WK-FedRoles DynamoDB Table
 
@@ -27,7 +47,7 @@ aws sts assume-role \
 
 ### Lookup by Account
 ```bash
-aws dynamodb scan --table-name WK-FedRoles --profile WK-PROFILE --region us-east-1 \
+aws dynamodb scan --table-name WK-FedRoles --region us-east-1 \
   --filter-expression "AccountNumber = :acct" \
   --expression-attribute-values '{":acct": {"S": "ACCOUNT_NUMBER"}}' \
   --query 'Items[].{Role:AccountFedRole.S,ARN:ARN.S}' \
@@ -36,7 +56,7 @@ aws dynamodb scan --table-name WK-FedRoles --profile WK-PROFILE --region us-east
 
 ### Direct Key Lookup
 ```bash
-aws dynamodb get-item --table-name WK-FedRoles --profile WK-PROFILE --region us-east-1 \
+aws dynamodb get-item --table-name WK-FedRoles --region us-east-1 \
   --key '{"AccountFedRole": {"S": "ACCOUNT_NUMBER-WKFedRoles-Operations"}}' \
   --query 'Item.ARN.S' --output text
 ```
@@ -108,7 +128,7 @@ done
 ## Critical Rules
 
 1. **Assume + execute in ONE Bash call** — env vars are lost between Bash invocations
-2. **DynamoDB queries use `--profile WK-PROFILE`** — the table lives in the master account
-3. **Never use `--profile WK-PROFILE` for target operations** — that hits the master account
+2. **No `--profile` flags** — the credential chain (env vars first, then file) handles routing automatically
+3. **Master credentials run the DynamoDB lookup**; assume-role swaps them for the target role's temp creds in the same shell
 4. **Default to Operations role** unless the task specifically requires another type
 5. **Re-assume role** if commands fail after extended operations (token expiry)

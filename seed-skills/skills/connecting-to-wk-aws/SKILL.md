@@ -23,10 +23,24 @@ Master Account (<MASTER_ACCOUNT_ID>)   Target WK Account
 
 ## Configuration
 
-- **AWS Profile**: `WK-PROFILE` (in `~/.aws/credentials`) — credentials provided
-  out-of-band by the operator (or via the Hive secret store once available)
+- **Credential source (preferred)**: environment variables, populated by the
+  **Hive Secret Store** under the `aws.*` prefix:
+  - `aws.access_key_id` → `AWS_ACCESS_KEY_ID`
+  - `aws.secret_access_key` → `AWS_SECRET_ACCESS_KEY`
+  - `aws.session_token` → `AWS_SESSION_TOKEN` (optional)
+  - `aws.region` → `AWS_DEFAULT_REGION`
+
+  When these are present, the AWS CLI uses them automatically — **no
+  `--profile` flag needed**. The injected credentials should be those of the
+  master account that holds the `WK-FedRoles` DynamoDB table.
+
+- **Credential source (fallback)**: `~/.aws/credentials` file with a
+  `[WK-PROFILE]` section. Used only if env vars aren't set. To use the
+  fallback explicitly: `export AWS_PROFILE=WK-PROFILE`.
+
 - **Master Account**: `<MASTER_ACCOUNT_ID>` — the account that owns the
-  `WK-FedRoles` table; resolve from `aws sts get-caller-identity --profile WK-PROFILE`
+  `WK-FedRoles` table; resolve from `aws sts get-caller-identity` (no
+  `--profile` flag when env vars are populated)
 - **DynamoDB Table**: `WK-FedRoles` (region: `us-east-1`)
 - **Default Region**: `us-east-1`
 - **Restore/Secondary Region**: `us-west-2`
@@ -88,10 +102,39 @@ The helper script `templates/wk-assume-role.sh` runs this check at the top, so
 sourcing it covers Step 0 automatically. Run Step 0 manually first only when
 *not* using the helper script.
 
-### Step 1: Look Up Roles for the Target Account
+### Step 0.5: Verify Master Credentials Are Available
+
+The AWS CLI follows a documented credential chain — env vars first, then the
+shared credentials file. Hive populates `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY` from the secret store automatically when those entries
+exist (`aws.access_key_id`, `aws.secret_access_key`).
 
 ```bash
-aws dynamodb scan --table-name WK-FedRoles --profile WK-PROFILE --region us-east-1 \
+# Confirm we can call AWS as the master account before proceeding.
+# Branch behavior:
+#   • env vars present → use them directly (no --profile flag)
+#   • env vars absent but ~/.aws/credentials [WK-PROFILE] exists → export AWS_PROFILE=WK-PROFILE
+#   • neither present → STOP and report the credential gap to the user
+if [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+  echo "[wk-aws] using credentials from environment (Hive secret store)"
+elif [ -f ~/.aws/credentials ] && grep -q '\[WK-PROFILE\]' ~/.aws/credentials; then
+  export AWS_PROFILE=WK-PROFILE
+  echo "[wk-aws] using legacy WK-PROFILE from ~/.aws/credentials"
+else
+  echo "[wk-aws] no credentials available — set aws.access_key_id +"
+  echo "[wk-aws] aws.secret_access_key in the Hive Secret Store, or create"
+  echo "[wk-aws] ~/.aws/credentials with [WK-PROFILE]. Cannot proceed."
+  exit 1
+fi
+aws sts get-caller-identity --output json
+```
+
+### Step 1: Look Up Roles for the Target Account
+
+The CLI auto-uses env vars or `AWS_PROFILE` per Step 0.5 — no `--profile` flag.
+
+```bash
+aws dynamodb scan --table-name WK-FedRoles --region us-east-1 \
   --filter-expression "AccountNumber = :acct" \
   --expression-attribute-values '{":acct": {"S": "ACCOUNT_NUMBER"}}' \
   --query 'Items[].{Role:AccountFedRole.S,ARN:ARN.S}' \
@@ -111,7 +154,6 @@ Select the role based on the task:
 CREDS=$(aws sts assume-role \
   --role-arn "ROLE_ARN_FROM_STEP_1" \
   --role-session-name wk-session \
-  --profile WK-PROFILE \
   --output json)
 
 export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | python3 -c "import sys,json; print(json.load(sys.stdin)['Credentials']['AccessKeyId'])")
@@ -119,13 +161,19 @@ export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | python3 -c "import sys,json; prin
 export AWS_SESSION_TOKEN=$(echo "$CREDS" | python3 -c "import sys,json; print(json.load(sys.stdin)['Credentials']['SessionToken'])")
 ```
 
+> Note: `assume-role` overwrites the master `AWS_ACCESS_KEY_ID` /
+> `AWS_SECRET_ACCESS_KEY` env vars in the current shell with the assumed-role
+> temporary credentials. To re-run Step 1 (look up another role) you must
+> `unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN` first to
+> drop back to master credentials, then re-run Step 0.5.
+
 ### Step 3: Execute AWS Commands
 
 **CRITICAL**: The assumed role credentials are environment variables and only live within a single Bash tool call. You MUST combine the assume-role AND the actual AWS command(s) in the **same single Bash invocation**. If you split them across separate Bash calls, the credentials will be lost and commands will fail silently or use wrong credentials.
 
 ```bash
 # CORRECT — assume + execute in ONE Bash call
-CREDS=$(aws sts assume-role --role-arn "ROLE_ARN" --role-session-name wk-session --profile WK-PROFILE --output json) && \
+CREDS=$(aws sts assume-role --role-arn "ROLE_ARN" --role-session-name wk-session --output json) && \
 export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | python3 -c "import sys,json; print(json.load(sys.stdin)['Credentials']['AccessKeyId'])") && \
 export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | python3 -c "import sys,json; print(json.load(sys.stdin)['Credentials']['SecretAccessKey'])") && \
 export AWS_SESSION_TOKEN=$(echo "$CREDS" | python3 -c "import sys,json; print(json.load(sys.stdin)['Credentials']['SessionToken'])") && \
@@ -170,16 +218,23 @@ done
 | Error | Cause | Fix |
 |-------|-------|-----|
 | `aws: command not found` | AWS CLI not installed | Run **Step 0** above; details in `references/install-aws-cli.md` |
-| `ExpiredTokenException` | STS session expired | Re-assume the role |
-| `AccessDenied` on assume-role | WK-PROFILE creds invalid | Check `~/.aws/credentials` [WK-PROFILE] |
+| `Unable to locate credentials` | No env vars and no `[WK-PROFILE]` | Set `aws.access_key_id` + `aws.secret_access_key` in Hive Secret Store, OR create `~/.aws/credentials` with `[WK-PROFILE]` (Step 0.5) |
+| `ExpiredTokenException` | STS session expired | Drop assumed-role env vars (`unset AWS_ACCESS_KEY_ID …`) and re-do Step 0.5 + Step 2 |
+| `AccessDenied` on assume-role | Master credentials invalid or lack `sts:AssumeRole` | Verify the master account creds + role trust policy on the target |
 | `AccessDenied` on operation | Role lacks permission | Try **Admin** role instead of **Operations** |
 | Empty results unexpectedly | Credentials not in scope | Verify assume + command are in same Bash call |
 | Account not found in DynamoDB | Account not onboarded to WK-FedRoles | Inform user, check account number |
 
 ## Important Notes
 
-1. **Never use `--profile WK-PROFILE` for target account operations** — that's the master account. Always assume a role first.
-2. **DynamoDB queries use `--profile WK-PROFILE`** — the WK-FedRoles table lives in the master account.
-3. **Default to Operations role** unless the task specifically requires another role type.
-4. **Always combine assume-role + commands in a single Bash call** to prevent credential loss between shell invocations.
-5. **STS sessions are temporary** — re-assume if commands start failing after extended operations.
+1. **Master credentials come from env vars** — Hive populates them from the
+   secret store. The `WK-PROFILE` file is the legacy fallback only.
+2. **Never use `--profile` flags in target operations** — once the role is
+   assumed via Step 2, the temporary credentials are in env vars and the CLI
+   uses them automatically. A `--profile` flag would override and break it.
+3. **DynamoDB lookup runs as the master account** — Steps 0.5 and 1 use the
+   master credentials (env vars or `WK-PROFILE`). Step 2 swaps them for the
+   assumed role; that's why Step 1 must run *before* Step 2 in the same call.
+4. **Default to Operations role** unless the task specifically requires another role type.
+5. **Always combine assume-role + commands in a single Bash call** to prevent credential loss between shell invocations.
+6. **STS sessions are temporary (1 hour)** — `unset` the assumed-role env vars and re-run Step 0.5 + Step 2 to get a fresh hour.
