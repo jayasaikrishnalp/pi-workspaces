@@ -81,6 +81,7 @@ import {
   MCP_CALL_PATH,
 } from './routes/mcp.js'
 import { handleSearch, SEARCH_PATH } from './routes/search.js'
+import { handleDashboardIntelligence, DASHBOARD_INTELLIGENCE_PATH } from './routes/dashboard-intelligence.js'
 import {
   handleSoulsList, handleSoulsCreate, handleSoulsRead, handleSoulsUpdate,
   SOULS_PATH, SOULS_DETAIL_PATTERN,
@@ -171,6 +172,7 @@ const ROUTES: Route[] = [
 
   // Global FTS5 search across kb (skills/agents/workflows/memory/souls) + chat.
   { method: 'GET', pattern: SEARCH_PATH, handler: handleSearch },
+  { method: 'GET', pattern: DASHBOARD_INTELLIGENCE_PATH, handler: handleDashboardIntelligence },
 
   // Souls — agent character / identity definitions.
   { method: 'GET', pattern: SOULS_PATH, handler: handleSoulsList },

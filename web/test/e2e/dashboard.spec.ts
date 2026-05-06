@@ -1,96 +1,65 @@
 /**
- * Phase 2 — Dashboard renders all stat cards from live /api/probe and lists
- * recent jobs/tasks from /api/jobs + /api/tasks.
+ * Dashboard — Hermes-style session intelligence widgets backed by
+ * /api/dashboard/intelligence. The pre-rebuild stat cards (stat-skills etc)
+ * + provider/cost panels were removed in add-session-intelligence; the new
+ * surface is 4 hero cards + 7 widgets.
  */
 
 import { test, expect, loginAndVisit } from './_fixtures'
 
-test.describe('Dashboard screen', () => {
-  test('default route lands on dashboard with 8 stat cards', async ({ page, state }) => {
+test.describe('Dashboard — session intelligence', () => {
+  test('default route lands on dashboard with the 4 hero cards + 7 widgets', async ({ page, state }) => {
     await loginAndVisit(page, state)
-    // Dashboard is the default active screen on first boot; explicitly click
-    // it to ensure state from a prior test doesn't bias the route.
     await page.getByTestId('sb-item-dashboard').click()
     await expect(page.getByTestId('dashboard')).toBeVisible()
-
-    for (const id of ['skills', 'agents', 'souls', 'workflows', 'memory', 'jobs', 'tasks', 'terminal']) {
-      await expect(page.getByTestId(`stat-${id}`)).toBeVisible()
+    for (const id of ['hero-sessions', 'hero-tokens', 'hero-api-calls', 'hero-model']) {
+      await expect(page.getByTestId(id)).toBeVisible({ timeout: 8_000 })
+    }
+    for (const id of ['dash-hero', 'dash-usage-trend', 'dash-top-models', 'dash-cache', 'dash-sessions-intel', 'dash-mix-rhythm', 'dash-tools-usage']) {
+      await expect(page.getByTestId(id)).toBeVisible()
     }
   })
 
-  test('stat values reflect backend state after creating a soul + a task', async ({ page, state }) => {
-    const base = `http://127.0.0.1:${state.backendPort}`
-    const cookieJar = page.context()
-    // Reuse the global setup's session by logging in; cookie persists.
-    await loginAndVisit(page, state)
-
-    // Snapshot the current souls count from the rendered DOM.
-    const beforeSouls = parseInt(await page.getByTestId('stat-souls-value').innerText() || '0', 10)
-    const beforeTasks = parseInt(await page.getByTestId('stat-tasks-value').innerText() || '0', 10)
-
-    // Mutate via the API directly, with a unique name so concurrent specs
-    // don't collide on shared backend state.
-    const name = `phase2-soul-${Math.random().toString(36).slice(2, 8)}`
-    const cookieHeader = (await cookieJar.cookies()).filter((c) => c.name === 'workspace_session').map((c) => `${c.name}=${c.value}`).join('; ')
-    const soulRes = await page.request.post(`${base}/api/souls`, {
-      data: { name, description: 'phase 2 e2e' },
-      headers: { Cookie: cookieHeader },
-    })
-    expect(soulRes.status()).toBe(201)
-    const taskRes = await page.request.post(`${base}/api/tasks`, {
-      data: { title: `phase 2 task ${name}` },
-      headers: { Cookie: cookieHeader },
-    })
-    expect(taskRes.status()).toBe(201)
-
-    // Reload to refresh dashboard.
-    await page.reload()
-
-    await expect(page.getByTestId('stat-souls-value')).toHaveText(String(beforeSouls + 1))
-    await expect(page.getByTestId('stat-tasks-value')).toHaveText(String(beforeTasks + 1))
-  })
-
-  test('recent tasks list shows the task we just created', async ({ page, state }) => {
-    await loginAndVisit(page, state)
-    const base = `http://127.0.0.1:${state.backendPort}`
-    const cookieHeader = (await page.context().cookies()).filter((c) => c.name === 'workspace_session').map((c) => `${c.name}=${c.value}`).join('; ')
-    const title = `phase2-task-${Math.random().toString(36).slice(2, 8)}`
-    const created = await page.request.post(`${base}/api/tasks`, {
-      data: { title },
-      headers: { Cookie: cookieHeader },
-    })
-    const taskId = (await created.json()).id
-
-    await page.reload()
-    await expect(page.getByTestId(`task-row-${taskId}`)).toContainText(title)
-    await expect(page.getByTestId(`task-row-${taskId}`)).toContainText('triage')
-  })
-
-  test('mcp pills surface configured server status (ref / context7 from seed catalog)', async ({ page, state }) => {
-    await loginAndVisit(page, state)
-    // The seed catalog always contains ref + context7. Either may be
-    // disconnected (lazy connect) or in error (no key) — what matters is
-    // the pills are present.
-    await expect(page.getByTestId('mcp-pill-ref')).toBeVisible()
-    await expect(page.getByTestId('mcp-pill-context7')).toBeVisible()
-  })
-
-  test('Models & Providers panel lists all 8 seed providers with status', async ({ page, state }) => {
+  test('window toggle switches the active selection', async ({ page, state }) => {
     await loginAndVisit(page, state)
     await page.getByTestId('sb-item-dashboard').click()
-    await expect(page.getByTestId('dash-providers')).toBeVisible({ timeout: 5_000 })
-    for (const id of ['github-copilot', 'anthropic', 'openai', 'openrouter', 'google', 'x-ai', 'deepseek', 'ollama']) {
-      await expect(page.getByTestId(`provider-row-${id}`)).toBeVisible()
-    }
+    await expect(page.getByTestId('dashboard')).toHaveAttribute('data-window', '7')
+    await page.getByTestId('dash-window-30d').click()
+    await expect(page.getByTestId('dashboard')).toHaveAttribute('data-window', '30')
   })
 
-  test('Cost & Usage panel shows the four cost cells', async ({ page, state }) => {
+  test('cache widget is labeled CACHE CONTRIBUTION (not "hit rate")', async ({ page, state }) => {
     await loginAndVisit(page, state)
     await page.getByTestId('sb-item-dashboard').click()
-    await expect(page.getByTestId('dash-cost')).toBeVisible()
-    for (const k of ['in', 'out', 'ctx', 'usd']) {
-      await expect(page.getByTestId(`dash-cost-${k}`)).toBeVisible()
+    await expect(page.getByTestId('dash-cache')).toContainText('CACHE CONTRIBUTION')
+  })
+
+  test('endpoint returns the full payload shape for window=7d', async ({ page, state }) => {
+    await loginAndVisit(page, state)
+    const cookie = (await page.context().cookies()).filter((c) => c.name === 'workspace_session').map((c) => `${c.name}=${c.value}`).join('; ')
+    const r = await page.request.get(`http://127.0.0.1:${state.backendPort}/api/dashboard/intelligence?window=7d`, { headers: { Cookie: cookie } })
+    expect(r.status()).toBe(200)
+    const body = await r.json()
+    for (const k of ['windowDays', 'sessionsCount', 'apiCallsCount', 'tokenTotals', 'topModels', 'cacheContribution', 'usageTrend', 'sessionsIntelligence', 'hourOfDayHistogram', 'tokenMix', 'topTools', 'activeModel']) {
+      expect(body).toHaveProperty(k)
     }
-    await expect(page.getByTestId('dash-cost-usd')).toContainText('$0.00')
+    expect(body.hourOfDayHistogram).toHaveLength(24)
+  })
+
+  test('endpoint rejects out-of-range window with INVALID_WINDOW', async ({ page, state }) => {
+    await loginAndVisit(page, state)
+    const cookie = (await page.context().cookies()).filter((c) => c.name === 'workspace_session').map((c) => `${c.name}=${c.value}`).join('; ')
+    const r = await page.request.get(`http://127.0.0.1:${state.backendPort}/api/dashboard/intelligence?window=999d`, { headers: { Cookie: cookie } })
+    expect(r.status()).toBe(400)
+    const body = await r.json()
+    expect(body.error.code).toBe('INVALID_WINDOW')
+  })
+
+  test('mcp pills surface from probe (still rendered in shell, not on dashboard)', async ({ page, state }) => {
+    await loginAndVisit(page, state)
+    // MCP server status now lives on the MCP screen + probe banner. Dashboard
+    // intelligence dropped the placeholder cost panel + provider grid in
+    // favor of session analytics.
+    await expect(page.getByTestId('probe-pill-mcp')).toBeVisible({ timeout: 8_000 })
   })
 })

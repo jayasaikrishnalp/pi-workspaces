@@ -15,6 +15,7 @@ import fsSync from 'node:fs'
 import { McpBroker } from './mcp-broker.js'
 import { loadSeedConfig } from './mcp-config.js'
 import { openDb, upsertKbFts, deleteKbFts, type Db } from './db.js'
+import { installPersister } from './chat-persister.js'
 import type { SessionInfo } from '../types/run.js'
 
 export type SpawnPi = (args: readonly string[], opts?: SpawnOptions) => ChildProcess
@@ -137,6 +138,10 @@ export function getWiring(options: WiringOptions = {}): Wiring {
 
   const mcpBroker = new McpBroker(loadSeedConfig())
   const db = openDb(path.join(root, 'data.sqlite'))
+
+  // Mirror chat-event-bus events into chat_messages so the dashboard
+  // intelligence aggregator has data to read. Idempotent + non-blocking.
+  installPersister(bus, db)
 
   // Wire kb-watcher → kb_fts: re-index any change under skills/agents/
   // workflows/memory/souls. Best-effort; an indexing failure must NOT crash

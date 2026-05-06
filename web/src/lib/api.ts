@@ -194,6 +194,31 @@ export const createWorkflow = (input: WorkflowInput) =>
 export const updateWorkflow = (name: string, patch: Partial<WorkflowInput>) =>
   api.put<{ name: string; path: string }>(`/api/workflows/${encodeURIComponent(name)}`, patch)
 
+/* ===== Dashboard intelligence ===== */
+
+export interface DashboardIntelligence {
+  windowDays: number
+  sessionsCount: number
+  apiCallsCount: number
+  tokenTotals: { input: number; output: number; cacheRead: number; cacheWrite: number }
+  topModels: Array<{ model: string; tokens: number; sessions: number; costUsd: number }>
+  cacheContribution: number
+  usageTrend: Array<{ bucket: string; tokensTotal: number; cacheRead: number; cost: number; topTool: string | null }>
+  sessionsIntelligence: Array<{
+    sessionId: string; title: string; msgCount: number; toolCount: number;
+    tokensTotal: number; costUsd: number; predominantModel: string | null;
+    lastActivityAt: number | null; agoText: string;
+    tags: Array<'STALE' | 'TOOL_HEAVY' | 'HIGH_TOKEN'>
+  }>
+  hourOfDayHistogram: Array<{ hourUtc: number; count: number; tokens: number }>
+  tokenMix: { input: number; output: number; cacheRead: number; cacheWrite: number }
+  topTools: Array<{ tool: string; count: number }>
+  activeModel: string | null
+}
+
+export const fetchDashboardIntelligence = (windowDays: number) =>
+  api.get<DashboardIntelligence>(`/api/dashboard/intelligence?window=${windowDays}d`)
+
 /* ===== Sessions ===== */
 
 export interface SessionInfo { sessionKey: string; createdAt: number }

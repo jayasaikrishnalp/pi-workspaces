@@ -1,216 +1,30 @@
-import { useApi } from '../../hooks/useApi'
+import { useState } from 'react'
 import {
-  listJobs, listTasks, probe, listProviders, getActiveProvider, setActiveProvider,
-  type Job, type Task, type Provider,
-} from '../../lib/api'
-import { useState, useEffect } from 'react'
+  ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip,
+} from 'recharts'
+
+import { useApi } from '../../hooks/useApi'
+import { fetchDashboardIntelligence, type DashboardIntelligence } from '../../lib/api'
 import type { ScreenId } from '../Sidebar'
 
 interface Props { onPick?: (id: ScreenId) => void }
 
-interface StatCardProps {
-  label: string
-  value: number | string
-  hint?: string
-  testId?: string
-}
-
-function StatCard({ label, value, hint, testId }: StatCardProps): JSX.Element {
-  return (
-    <div className="dash-card" data-testid={testId}>
-      <div className="dash-card-label">{label}</div>
-      <div className="dash-card-value" data-testid={testId ? `${testId}-value` : undefined}>{value}</div>
-      {hint ? <div className="dash-card-hint">{hint}</div> : null}
-    </div>
-  )
-}
-
-function JobRow({ job }: { job: Job }): JSX.Element {
-  return (
-    <div className="dash-row" data-testid={`job-row-${job.id}`}>
-      <span className={`dash-row-status status-${job.status}`}>{job.status}</span>
-      <span className="dash-row-title">{job.title ?? job.run_id ?? job.id.slice(0, 8)}</span>
-      <span className="dash-row-meta">{new Date(job.created_at).toLocaleTimeString()}</span>
-    </div>
-  )
-}
-
-function TaskRow({ task }: { task: Task }): JSX.Element {
-  return (
-    <div className="dash-row" data-testid={`task-row-${task.id}`}>
-      <span className={`dash-row-status status-${task.status}`}>{task.status}</span>
-      <span className="dash-row-title">{task.title}</span>
-      <span className="dash-row-meta">{task.source}</span>
-    </div>
-  )
-}
-
-/**
- * Provider + model matrix wired to /api/providers + /api/providers/active.
- * Lets the operator see which providers are configured, how many models each
- * exposes, and pick the active one inline (no need to dive into Settings).
- */
-function ProvidersPanel({ testId }: { testId?: string }): JSX.Element {
-  const list = useApi('dash.providers', listProviders)
-  const active = useApi('dash.active-provider', getActiveProvider)
-  const [pendingProvider, setPendingProvider] = useState<string | null>(null)
-  const [pendingModel, setPendingModel] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    if (active.data) {
-      setPendingProvider(active.data.providerId)
-      setPendingModel(active.data.modelId)
-    }
-  }, [active.data])
-
-  const provs: Provider[] = list.data?.providers ?? []
-  const selected = provs.find((p) => p.id === pendingProvider)
-  const isActive = (p: Provider) => active.data?.providerId === p.id
-
-  const apply = async () => {
-    if (!pendingProvider || !pendingModel) return
-    setBusy(true); setError(null)
-    try {
-      await setActiveProvider(pendingProvider, pendingModel)
-      active.reload()
-    } catch (e) { setError((e as Error).message) }
-    finally { setBusy(false) }
-  }
-
-  return (
-    <div className="dash-panel" data-testid={testId}>
-      <div className="dash-panel-head">
-        <span className="kk-label-tiny">MODELS &amp; PROVIDERS</span>
-        <span className="dash-panel-meta">{provs.filter((p) => p.status === 'configured' || p.status === 'detected').length}/{provs.length} ready</span>
-      </div>
-      {list.loading && !list.data ? <div className="dash-empty">loading…</div>
-        : provs.length === 0 ? <div className="dash-empty">no providers in catalog</div>
-        : (
-          <>
-            <div className="dash-rows" data-testid={`${testId}-list`}>
-              {provs.map((p) => (
-                <div key={p.id}
-                     className={`dash-row provider-row ${isActive(p) ? 'active' : ''}`}
-                     data-testid={`provider-row-${p.id}`}>
-                  <span className={`dash-row-status status-${p.status === 'configured' || p.status === 'detected' ? 'completed' : p.status === 'error' ? 'failed' : 'queued'}`}>
-                    {p.status}
-                  </span>
-                  <span className="dash-row-title">
-                    {p.name}{isActive(p) ? <span className="provider-active-pill">ACTIVE</span> : null}
-                  </span>
-                  <span className="dash-row-meta">{p.kind} · {p.models.length} {p.models.length === 1 ? 'model' : 'models'}</span>
-                </div>
-              ))}
-            </div>
-            <div className="provider-switcher">
-              <select
-                className="input"
-                value={pendingProvider ?? ''}
-                onChange={(e) => { setPendingProvider(e.target.value || null); setPendingModel(null) }}
-                data-testid="provider-switcher-provider"
-              >
-                <option value="">— pick provider —</option>
-                {provs.map((p) => (
-                  <option key={p.id} value={p.id} disabled={p.status === 'unconfigured' || p.status === 'error'}>
-                    {p.name} · {p.status}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="input"
-                value={pendingModel ?? ''}
-                onChange={(e) => setPendingModel(e.target.value || null)}
-                disabled={!selected}
-                data-testid="provider-switcher-model"
-              >
-                <option value="">— pick model —</option>
-                {selected?.models.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <button
-                className="btn btn-primary"
-                onClick={apply}
-                disabled={busy || !pendingProvider || !pendingModel || (pendingProvider === active.data?.providerId && pendingModel === active.data?.modelId)}
-                data-testid="provider-switcher-apply"
-              >
-                {busy ? 'saving…' : 'set active'}
-              </button>
-            </div>
-            {error ? <div className="chat-msg-error">{error}</div> : null}
-          </>
-        )}
-    </div>
-  )
-}
-
-/**
- * Cost & usage at-a-glance. Backend doesn't track per-session totals yet
- * (deferred to add-chat-controls-multi-model), so the values here mirror
- * the statusbar's placeholder zeros — but they're surfaced prominently so
- * the operator sees where token + cost telemetry will land.
- */
-function CostPanel({ testId }: { testId?: string }): JSX.Element {
-  // Placeholders. Once the bridge tracks tokens/cost, swap to live data.
-  const session = { in: 0, out: 0, ctxPct: 0, usd: 0, totalSessions: 0 }
-  return (
-    <div className="dash-panel" data-testid={testId}>
-      <div className="dash-panel-head">
-        <span className="kk-label-tiny">COST &amp; USAGE</span>
-        <span className="dash-panel-meta">{session.totalSessions} sessions · current</span>
-      </div>
-      <div className="cost-grid">
-        <div className="cost-cell" data-testid={`${testId}-in`}>
-          <span className="cost-cell-label">TOKENS IN</span>
-          <span className="cost-cell-value">{session.in.toLocaleString()}</span>
-        </div>
-        <div className="cost-cell" data-testid={`${testId}-out`}>
-          <span className="cost-cell-label">TOKENS OUT</span>
-          <span className="cost-cell-value">{session.out.toLocaleString()}</span>
-        </div>
-        <div className="cost-cell" data-testid={`${testId}-ctx`}>
-          <span className="cost-cell-label">CONTEXT</span>
-          <span className="cost-cell-value">{session.ctxPct}%</span>
-        </div>
-        <div className="cost-cell highlight" data-testid={`${testId}-usd`}>
-          <span className="cost-cell-label">SESSION COST</span>
-          <span className="cost-cell-value">${session.usd.toFixed(2)}</span>
-        </div>
-      </div>
-      <div className="cost-note">
-        Token + cost telemetry lands with the <code>add-chat-controls-multi-model</code>
-        change. The pi bridge will surface usage data per run; this panel will then
-        show live totals across the active session.
-      </div>
-    </div>
-  )
-}
+type Window = 7 | 14 | 30
 
 export function DashboardScreen({ onPick }: Props = {}): JSX.Element {
-  const probeState = useApi('dashboard.probe', probe)
-  const jobsState = useApi('dashboard.jobs', () => listJobs({ limit: 5 }))
-  const tasksState = useApi('dashboard.tasks', () => listTasks({ limit: 5 }))
-
-  const p = probeState.data
-  const counts = {
-    skills: p?.skills.count ?? 0,
-    agents: p?.agents.count ?? 0,
-    workflows: p?.workflows.count ?? 0,
-    memory: p?.memory.count ?? 0,
-    souls: p?.souls?.count ?? 0,
-    jobs: p?.jobs?.count ?? 0,
-    tasks: p?.tasks?.count ?? 0,
-    terminal: p?.terminal?.count ?? 0,
-  }
+  const [windowDays, setWindowDays] = useState<Window>(7)
+  const intel = useApi(`dash.intel.${windowDays}`, () => fetchDashboardIntelligence(windowDays))
+  const data = intel.data ?? null
 
   return (
-    <div className="dashboard" data-testid="dashboard">
+    <div className="dashboard" data-testid="dashboard" data-window={windowDays}>
       <div className="dash-header">
         <div>
           <h2>Dashboard</h2>
           <div className="dash-sub">
-            {p ? (p.pi.ok ? `pi ${p.pi.version ?? ''}` : 'pi offline') : 'probing…'}
-            {p?.pi.activeModel ? ` · ${p.pi.activeModel}` : ''}
+            session intelligence · last {windowDays} days
+            {data?.activeModel ? ` · active: ${data.activeModel}` : ''}
           </div>
           <div className="dash-quick-actions" data-testid="dash-quick-actions">
             <button className="btn btn-primary" onClick={() => onPick?.('chat')} data-testid="dash-action-chat">NEW CHAT →</button>
@@ -219,66 +33,232 @@ export function DashboardScreen({ onPick }: Props = {}): JSX.Element {
             <button className="btn btn-ghost" onClick={() => onPick?.('graph')} data-testid="dash-action-graph">GRAPH →</button>
           </div>
         </div>
-        {p?.mcp ? (
-          <div className="dash-mcp" data-testid="dash-mcp">
-            {p.mcp.servers.map((s) => (
-              <span key={s.id} className={`mcp-pill mcp-${s.status}`} data-testid={`mcp-pill-${s.id}`}>
-                {s.id} · {s.status} {s.toolCount > 0 ? `· ${s.toolCount} tools` : ''}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="dash-grid" data-testid="dash-grid">
-        <StatCard testId="stat-skills"    label="SKILLS"    value={counts.skills} />
-        <StatCard testId="stat-agents"    label="AGENTS"    value={counts.agents} />
-        <StatCard testId="stat-souls"     label="SOULS"     value={counts.souls}    hint="character/identity" />
-        <StatCard testId="stat-workflows" label="WORKFLOWS" value={counts.workflows} />
-        <StatCard testId="stat-memory"    label="MEMORY"    value={counts.memory} />
-        <StatCard testId="stat-jobs"      label="JOBS"      value={counts.jobs} />
-        <StatCard testId="stat-tasks"     label="TASKS"     value={counts.tasks} />
-        <StatCard testId="stat-terminal"  label="TERMINAL"  value={counts.terminal} hint="commands run" />
-      </div>
-
-      <div className="dash-2col">
-        <CostPanel testId="dash-cost" />
-        <ProvidersPanel testId="dash-providers" />
-      </div>
-
-      <div className="dash-2col">
-        <div className="dash-panel" data-testid="dash-recent-jobs">
-          <div className="dash-panel-head">
-            <span className="kk-label-tiny">RECENT JOBS</span>
-            <span className="dash-panel-meta">{jobsState.data?.jobs?.length ?? 0}</span>
-          </div>
-          {jobsState.loading && !jobsState.data ? (
-            <div className="dash-empty">loading…</div>
-          ) : jobsState.data?.jobs?.length === 0 ? (
-            <div className="dash-empty" data-testid="dash-jobs-empty">no jobs yet — start a chat session to create one</div>
-          ) : (
-            <div className="dash-rows">
-              {jobsState.data?.jobs?.map((j) => <JobRow key={j.id} job={j} />)}
-            </div>
-          )}
-        </div>
-
-        <div className="dash-panel" data-testid="dash-recent-tasks">
-          <div className="dash-panel-head">
-            <span className="kk-label-tiny">RECENT TASKS</span>
-            <span className="dash-panel-meta">{tasksState.data?.tasks?.length ?? 0}</span>
-          </div>
-          {tasksState.loading && !tasksState.data ? (
-            <div className="dash-empty">loading…</div>
-          ) : tasksState.data?.tasks?.length === 0 ? (
-            <div className="dash-empty" data-testid="dash-tasks-empty">no tasks yet</div>
-          ) : (
-            <div className="dash-rows">
-              {tasksState.data?.tasks?.map((t) => <TaskRow key={t.id} task={t} />)}
-            </div>
-          )}
+        <div className="dash-window-toggle" data-testid="dash-window-toggle">
+          {([7, 14, 30] as Window[]).map((w) => (
+            <button key={w}
+              className={`dash-window-btn ${w === windowDays ? 'active' : ''}`}
+              onClick={() => setWindowDays(w)}
+              data-testid={`dash-window-${w}d`}
+            >{w}D</button>
+          ))}
         </div>
       </div>
+
+      {!data ? <div className="dash-empty">loading dashboard…</div> : (
+        <>
+          <HeroStats data={data} />
+          <div className="dash-row-2col">
+            <UsageTrend data={data} />
+            <TopModels data={data} />
+          </div>
+          <div className="dash-row-2col">
+            <SessionsIntel data={data} />
+            <CacheContribution data={data} />
+          </div>
+          <div className="dash-row-2col">
+            <MixRhythm data={data} />
+            <ToolsUsage data={data} />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function fmtN(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
+
+function HeroStats({ data }: { data: DashboardIntelligence }): JSX.Element {
+  const totalTokens = data.tokenTotals.input + data.tokenTotals.output + data.tokenTotals.cacheRead
+  return (
+    <div className="dash-hero" data-testid="dash-hero">
+      <HeroCard label="SESSIONS" value={String(data.sessionsCount)} hint={`${data.windowDays}D · ${data.sessionsIntelligence.length} active`} testId="hero-sessions" />
+      <HeroCard label="TOKENS" value={fmtN(totalTokens)} hint={`${fmtN(data.tokenTotals.cacheRead)} cached`} testId="hero-tokens" />
+      <HeroCard label="API CALLS" value={String(data.apiCallsCount)} hint={`${data.windowDays}D window`} testId="hero-api-calls" />
+      <HeroCard label="ACTIVE MODEL" value={data.activeModel ?? '—'} hint={`${data.topModels[0]?.sessions ?? 0} sessions`} testId="hero-model" small />
+    </div>
+  )
+}
+
+function HeroCard({ label, value, hint, testId, small }: { label: string; value: string; hint: string; testId: string; small?: boolean }): JSX.Element {
+  return (
+    <div className="hero-card" data-testid={testId}>
+      <div className="hero-label">{label}</div>
+      <div className={`hero-value ${small ? 'small' : ''}`}>{value}</div>
+      <div className="hero-hint">{hint}</div>
+    </div>
+  )
+}
+
+function UsageTrend({ data }: { data: DashboardIntelligence }): JSX.Element {
+  const series = data.usageTrend.map((p) => ({ bucket: p.bucket.slice(5), tokens: p.tokensTotal, cache: p.cacheRead }))
+  const peak = series.reduce((m, p) => p.tokens > m.tokens ? p : m, { bucket: '', tokens: 0 })
+  const totalTokens = series.reduce((s, p) => s + p.tokens, 0)
+  const totalCost = data.usageTrend.reduce((s, p) => s + p.cost, 0)
+  const topTool = data.usageTrend.find((p) => p.topTool)?.topTool ?? null
+
+  return (
+    <div className="dash-panel dash-usage-trend" data-testid="dash-usage-trend">
+      <div className="dash-panel-head">
+        <span className="kk-label-tiny">USAGE TREND · {data.windowDays}D</span>
+        <span className="dash-panel-meta">{fmtN(totalTokens)} tokens · ${totalCost.toFixed(2)}</span>
+      </div>
+      <ul className="dash-callouts">
+        {peak.tokens > 0 ? <li>Peak {peak.bucket}: {fmtN(peak.tokens)} tokens</li> : <li>No activity in window</li>}
+        {topTool ? <li>Top tool: <code>{topTool}</code></li> : null}
+      </ul>
+      <div style={{ height: 200, marginTop: 8 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={series}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+            <XAxis dataKey="bucket" stroke="var(--text-secondary)" fontSize={10} />
+            <YAxis stroke="var(--text-secondary)" fontSize={10} />
+            <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6 }} />
+            <Line type="monotone" dataKey="tokens" stroke="var(--accent)" strokeWidth={2} dot={false} name="tokens" />
+            <Line type="monotone" dataKey="cache" stroke="var(--accent-cyan)" strokeWidth={1.5} dot={false} strokeDasharray="4 4" name="cache reads" />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+function TopModels({ data }: { data: DashboardIntelligence }): JSX.Element {
+  const max = Math.max(1, ...data.topModels.map((m) => m.tokens))
+  return (
+    <div className="dash-panel" data-testid="dash-top-models">
+      <div className="dash-panel-head">
+        <span className="kk-label-tiny">TOP MODELS · {data.windowDays}D</span>
+        <span className="dash-panel-meta">{data.topModels.length} ranked</span>
+      </div>
+      {data.topModels.length === 0 ? <div className="dash-empty">no model traffic yet</div> : (
+        <div className="dash-rows">
+          {data.topModels.map((m, i) => (
+            <div key={m.model} className="ranked-row" data-testid={`top-model-${m.model}`}>
+              <div className="ranked-row-head">
+                <span className="ranked-num">{i + 1}</span>
+                <span className="ranked-name">{m.model}</span>
+                <span className="ranked-meta">{fmtN(m.tokens)}</span>
+              </div>
+              <div className="ranked-bar"><div className="ranked-bar-fill" style={{ width: `${(m.tokens / max) * 100}%` }} /></div>
+              <div className="ranked-sub">{m.sessions} session{m.sessions === 1 ? '' : 's'} · ${m.costUsd.toFixed(2)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CacheContribution({ data }: { data: DashboardIntelligence }): JSX.Element {
+  const pct = (data.cacheContribution * 100).toFixed(1)
+  const ratio = data.tokenTotals.input > 0 ? (data.tokenTotals.cacheRead / data.tokenTotals.input).toFixed(1) : '—'
+  return (
+    <div className="dash-panel" data-testid="dash-cache">
+      <div className="dash-panel-head">
+        <span className="kk-label-tiny">CACHE CONTRIBUTION · {data.windowDays}D</span>
+      </div>
+      <div className="cache-big">{pct}<span style={{ fontSize: '0.5em' }}>%</span></div>
+      <div className="dash-empty" style={{ padding: 0, marginTop: 4 }}>
+        {fmtN(data.tokenTotals.cacheRead)} cache read / {fmtN(data.tokenTotals.input)} input · {ratio}× ratio
+      </div>
+      <div className="cache-note">
+        cache_read / (cache_read + cache_write + tokens_in). Anthropic's cache mechanic blurs "hit rate"; we report contribution.
+      </div>
+    </div>
+  )
+}
+
+function SessionsIntel({ data }: { data: DashboardIntelligence }): JSX.Element {
+  return (
+    <div className="dash-panel" data-testid="dash-sessions-intel">
+      <div className="dash-panel-head">
+        <span className="kk-label-tiny">SESSIONS INTELLIGENCE</span>
+        <span className="dash-panel-meta">{data.sessionsIntelligence.length} sessions</span>
+      </div>
+      {data.sessionsIntelligence.length === 0 ? <div className="dash-empty">no sessions in window</div> : (
+        <div className="dash-rows" style={{ maxHeight: 320, overflowY: 'auto' }}>
+          {data.sessionsIntelligence.map((s) => (
+            <div key={s.sessionId} className="sess-row" data-testid={`sess-row-${s.sessionId.slice(-6)}`}>
+              <div className="sess-row-title">
+                <span className="sess-title">{s.title}</span>
+                {s.tags.map((t) => <span key={t} className={`sess-tag tag-${t.toLowerCase()}`}>{t}</span>)}
+              </div>
+              <div className="sess-row-meta">
+                {s.predominantModel ? <span className="sess-model">{s.predominantModel}</span> : null}
+                <span>{s.msgCount} msgs</span>
+                {s.toolCount > 0 ? <span>{s.toolCount} tools</span> : null}
+                <span>{fmtN(s.tokensTotal)} tok</span>
+                {s.costUsd > 0 ? <span>${s.costUsd.toFixed(4)}</span> : null}
+                <span className="sess-ago">{s.agoText}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MixRhythm({ data }: { data: DashboardIntelligence }): JSX.Element {
+  const total = data.tokenMix.input + data.tokenMix.output + data.tokenMix.cacheRead + data.tokenMix.cacheWrite || 1
+  const pct = (n: number): string => `${((n / total) * 100).toFixed(1)}%`
+  const series = data.hourOfDayHistogram.map((h) => ({ hour: String(h.hourUtc).padStart(2, '0'), count: h.count }))
+  return (
+    <div className="dash-panel" data-testid="dash-mix-rhythm">
+      <div className="dash-panel-head">
+        <span className="kk-label-tiny">MIX &amp; RHYTHM · {data.windowDays}D · UTC</span>
+      </div>
+      <div className="mix-bar">
+        <div className="mix-seg cache"  style={{ flex: data.tokenMix.cacheRead || 0.0001 }}  title={`cache read: ${pct(data.tokenMix.cacheRead)}`} />
+        <div className="mix-seg input"  style={{ flex: data.tokenMix.input || 0.0001 }}      title={`input: ${pct(data.tokenMix.input)}`} />
+        <div className="mix-seg output" style={{ flex: data.tokenMix.output || 0.0001 }}     title={`output: ${pct(data.tokenMix.output)}`} />
+        <div className="mix-seg write"  style={{ flex: data.tokenMix.cacheWrite || 0.0001 }} title={`cache write: ${pct(data.tokenMix.cacheWrite)}`} />
+      </div>
+      <div className="mix-legend">
+        <span><span className="mix-dot cache"/>CACHE {pct(data.tokenMix.cacheRead)}</span>
+        <span><span className="mix-dot input"/>INPUT {pct(data.tokenMix.input)}</span>
+        <span><span className="mix-dot output"/>OUTPUT {pct(data.tokenMix.output)}</span>
+        <span><span className="mix-dot write"/>WRITE {pct(data.tokenMix.cacheWrite)}</span>
+      </div>
+      <div style={{ height: 100, marginTop: 6 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={series}>
+            <XAxis dataKey="hour" stroke="var(--text-secondary)" fontSize={9} interval={3} />
+            <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6 }} />
+            <Bar dataKey="count" fill="var(--accent)" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+function ToolsUsage({ data }: { data: DashboardIntelligence }): JSX.Element {
+  const max = Math.max(1, ...data.topTools.map((t) => t.count))
+  const total = data.topTools.reduce((s, t) => s + t.count, 0)
+  return (
+    <div className="dash-panel" data-testid="dash-tools-usage">
+      <div className="dash-panel-head">
+        <span className="kk-label-tiny">TOOLS USAGE · {data.windowDays}D</span>
+        <span className="dash-panel-meta">{data.topTools.length} of {data.topTools.length} ranked</span>
+      </div>
+      {data.topTools.length === 0 ? <div className="dash-empty">no tool calls yet</div> : (
+        <div className="dash-rows">
+          {data.topTools.map((t) => (
+            <div key={t.tool} className="ranked-row" data-testid={`tool-row-${t.tool}`}>
+              <div className="ranked-row-head">
+                <span className="ranked-name">{t.tool}</span>
+                <span className="ranked-meta">{t.count} · {((t.count / total) * 100).toFixed(1)}%</span>
+              </div>
+              <div className="ranked-bar tool"><div className="ranked-bar-fill" style={{ width: `${(t.count / max) * 100}%` }} /></div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

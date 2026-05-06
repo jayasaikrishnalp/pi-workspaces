@@ -128,6 +128,10 @@ export function mapPiEvent(
       else if (stopReason === 'error') status = 'error'
       const data: Record<string, unknown> = { runId, status }
       if (status !== 'success' && errorMessage) data.error = errorMessage
+      // Preserve the final usage / cost surfaced on the last assistant
+      // message — this is the running session total for the run. Used by
+      // chat-persister.ts + the dashboard intelligence aggregator.
+      if (isObject(last) && last.usage) data.usage = last.usage
       return {
         events: [{ event: 'run.completed', data }],
         // Reset on completion regardless of whether matching turn_end /
@@ -146,8 +150,11 @@ export function mapPiEvent(
 
     case 'turn_end': {
       if (turnId == null) return noop(state)
+      const message = isObject(piEvent.message) ? piEvent.message : null
+      const data: Record<string, unknown> = { runId, turnId }
+      if (message && message.usage) data.usage = message.usage
       return {
-        events: [{ event: 'turn.end', data: { runId, turnId } }],
+        events: [{ event: 'turn.end', data }],
         state: { ...state, currentTurnId: null },
       }
     }
@@ -161,11 +168,18 @@ export function mapPiEvent(
       // for the duration of this assistant message. Honor a pi-supplied id if
       // a future version starts including one.
       const messageId = asString(message.id) ?? ctx.nextMessageId()
+      const startData: Record<string, unknown> = { runId, turnId, messageId }
+      if (message.usage) startData.usage = message.usage
+      // Pi attaches `model` + `provider` + `api` to the assistant message
+      // payload — capture them so the persister can populate model rows.
+      if (typeof message.model === 'string') startData.model = message.model
+      if (typeof message.provider === 'string') startData.provider = message.provider
+      if (typeof message.api === 'string') startData.api = message.api
       return {
         events: [
           {
             event: 'assistant.start',
-            data: { runId, turnId, messageId },
+            data: startData,
           },
         ],
         state: { ...state, currentMessageId: messageId },
@@ -303,19 +317,19 @@ export function mapPiEvent(
       }
       if (role === 'assistant') {
         const messageId = asString(message.id) ?? state.currentMessageId ?? ''
+        const completedData: Record<string, unknown> = {
+          runId,
+          turnId,
+          messageId,
+          content: contentToText(message.content),
+          usage: message.usage ?? null,
+        }
+        if (typeof message.model === 'string') completedData.model = message.model
+        if (typeof message.provider === 'string') completedData.provider = message.provider
+        if (typeof message.api === 'string') completedData.api = message.api
+        if (typeof message.responseId === 'string') completedData.responseId = message.responseId
         return {
-          events: [
-            {
-              event: 'assistant.completed',
-              data: {
-                runId,
-                turnId,
-                messageId,
-                content: contentToText(message.content),
-                usage: message.usage ?? null,
-              },
-            },
-          ],
+          events: [{ event: 'assistant.completed', data: completedData }],
           state: { ...state, currentMessageId: null },
         }
       }

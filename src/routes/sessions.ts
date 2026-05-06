@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { randomUUID } from 'node:crypto'
 
 import type { Wiring } from '../server/wiring.js'
 import {
@@ -13,8 +12,18 @@ import type { SessionInfo } from '../types/run.js'
 const PATH_LIST = '/api/sessions'
 const PATH_ACTIVE_RUN = '/api/sessions/:sessionKey/active-run'
 
+/**
+ * Stable session id format: `sess_<epochMs>_<rand6>`.
+ * Frozen now so Phase B (per-session folders) can use the id verbatim
+ * as a folder name on disk without a destructive cutover.
+ */
+function generateSessionKey(): string {
+  const rand = Math.random().toString(36).replace('.', '').slice(0, 6).padEnd(6, '0')
+  return `sess_${Date.now()}_${rand}`
+}
+
 export function handleSessionsCreate(_req: IncomingMessage, res: ServerResponse, w: Wiring): void {
-  const sessionKey = randomUUID()
+  const sessionKey = generateSessionKey()
   const info: SessionInfo = { sessionKey, createdAt: Date.now() }
   w.sessions.set(sessionKey, info)
   jsonOk(res, 201, { sessionKey })

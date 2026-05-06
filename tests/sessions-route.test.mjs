@@ -70,7 +70,8 @@ test('POST /api/sessions creates a session and GET /api/sessions lists it', asyn
   try {
     const create = await fetchJson(ctx.port, '/api/sessions', { method: 'POST' })
     assert.equal(create.status, 201)
-    assert.match(create.body.sessionKey, /^[0-9a-f-]{36}$/)
+    // Stable session id format `sess_<epochMs>_<rand6>` per add-session-intelligence.
+    assert.match(create.body.sessionKey, /^sess_\d+_[a-z0-9]{6}$/)
     const sessionKey = create.body.sessionKey
 
     const list = await fetchJson(ctx.port, '/api/sessions')

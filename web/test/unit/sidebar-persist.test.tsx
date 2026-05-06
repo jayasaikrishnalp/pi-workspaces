@@ -25,6 +25,20 @@ beforeEach(() => {
         workspace: { kbRoot: '/tmp', skillsDir: '/tmp/skills', runsDir: '/tmp/runs' },
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
+    if (typeof url === 'string' && url.includes('/api/dashboard/intelligence')) {
+      return new Response(JSON.stringify({
+        windowDays: 7, sessionsCount: 0, apiCallsCount: 0,
+        tokenTotals: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        topModels: [], cacheContribution: 0, usageTrend: [],
+        sessionsIntelligence: [],
+        hourOfDayHistogram: Array.from({ length: 24 }, (_, h) => ({ hourUtc: h, count: 0, tokens: 0 })),
+        tokenMix: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        topTools: [], activeModel: null,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    if (typeof url === 'string' && url.endsWith('/api/sessions')) {
+      return new Response(JSON.stringify({ sessions: [] }), { status: 200 })
+    }
     return new Response('{}', { status: 200 })
   }))
 })
