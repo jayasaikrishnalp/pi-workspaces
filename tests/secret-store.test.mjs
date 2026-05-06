@@ -206,6 +206,32 @@ test('buildSecretEnv: empty store returns empty object', () => {
   assert.deepEqual(buildSecretEnv(fake), {})
 })
 
+test('buildSecretEnv: confluence.base_url + jira.email + jira.token map to atlassian env vars', () => {
+  const data = {
+    'confluence.': { 'confluence.base_url': 'https://example.atlassian.net' },
+    'jira.': { 'jira.email': 'me@example.com', 'jira.token': 'tkn-123' },
+  }
+  const fake = { getByPrefix: (p) => data[p] ?? {} }
+  const env = buildSecretEnv(fake)
+  assert.equal(env.CONFLUENCE_BASE_URL, 'https://example.atlassian.net')
+  assert.equal(env.JIRA_URL, 'https://example.atlassian.net')
+  assert.equal(env.ATLASSIAN_URL, 'https://example.atlassian.net')
+  assert.equal(env.ATLASSIAN_EMAIL, 'me@example.com')
+  assert.equal(env.JIRA_USERNAME, 'me@example.com')
+  assert.equal(env.ATLASSIAN_API_TOKEN, 'tkn-123')
+  assert.equal(env.JIRA_TOKEN, 'tkn-123')
+  assert.equal(env.JIRA_API_TOKEN, 'tkn-123')
+})
+
+test('buildSecretEnv: partial atlassian config emits only configured vars', () => {
+  const fake = { getByPrefix: (p) => p === 'jira.' ? { 'jira.token': 'only-token' } : {} }
+  const env = buildSecretEnv(fake)
+  assert.equal(env.JIRA_TOKEN, 'only-token')
+  assert.equal(env.ATLASSIAN_API_TOKEN, 'only-token')
+  assert.equal(env.CONFLUENCE_BASE_URL, undefined)
+  assert.equal(env.ATLASSIAN_EMAIL, undefined)
+})
+
 test('SecretStore emits "change" on setSecret', async () => {
   const s = new SecretStore({ workspaceRoot: tmpRoot() })
   await s.load()

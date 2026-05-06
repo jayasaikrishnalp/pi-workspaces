@@ -155,8 +155,11 @@ export function _resetSecretStoreForTests(): void {
  * Map secret-store entries into the env-var bag pi's bash tool and MCP
  * server children should see at spawn time.
  *
- *   aws.<field>    →  AWS_<UPPER_FIELD>           (special-case region)
- *   azure.<field>  →  ARM_<UPPER_FIELD> + AZURE_<UPPER_FIELD>
+ *   aws.<field>           →  AWS_<UPPER_FIELD>           (special-case region)
+ *   azure.<field>         →  ARM_<UPPER_FIELD> + AZURE_<UPPER_FIELD>
+ *   confluence.base_url   →  CONFLUENCE_BASE_URL + JIRA_URL + ATLASSIAN_URL
+ *   jira.email            →  ATLASSIAN_EMAIL + JIRA_USERNAME
+ *   jira.token            →  ATLASSIAN_API_TOKEN + JIRA_TOKEN + JIRA_API_TOKEN
  *
  * Designed against a minimal interface so unit tests can pass a fake
  * `{ getByPrefix }` without instantiating the full SecretStore.
@@ -194,6 +197,31 @@ export function buildSecretEnv(store: SecretReader): Record<string, string> {
       env[`ARM_${upper}`] = v
       env[`AZURE_${upper}`] = v
     }
+  }
+
+  // Atlassian (Jira + Confluence). The atlassian MCP server reads
+  // CONFLUENCE_BASE_URL / ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN | JIRA_TOKEN.
+  // Emit common aliases so direct CLI / SDK usage from skills also picks
+  // them up without having to remember which name a given tool wants.
+  const confluence = store.getByPrefix('confluence.')
+  const baseUrl = confluence['confluence.base_url']
+  if (typeof baseUrl === 'string' && baseUrl.length > 0) {
+    env.CONFLUENCE_BASE_URL = baseUrl
+    env.JIRA_URL = baseUrl
+    env.ATLASSIAN_URL = baseUrl
+  }
+
+  const jira = store.getByPrefix('jira.')
+  const email = jira['jira.email']
+  if (typeof email === 'string' && email.length > 0) {
+    env.ATLASSIAN_EMAIL = email
+    env.JIRA_USERNAME = email
+  }
+  const token = jira['jira.token']
+  if (typeof token === 'string' && token.length > 0) {
+    env.ATLASSIAN_API_TOKEN = token
+    env.JIRA_TOKEN = token
+    env.JIRA_API_TOKEN = token
   }
 
   return env

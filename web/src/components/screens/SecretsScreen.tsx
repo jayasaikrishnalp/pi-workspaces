@@ -16,6 +16,12 @@ const AZURE_PRESET = [
   { key: 'azure.subscription_id', label: 'Subscription ID', placeholder: '00000000-0000-...' },
 ] as const
 
+const ATLASSIAN_PRESET = [
+  { key: 'confluence.base_url', label: 'Confluence Base URL', placeholder: 'https://your-org.atlassian.net' },
+  { key: 'jira.email', label: 'Email', placeholder: 'you@your-org.com' },
+  { key: 'jira.token', label: 'API Token', placeholder: 'ATATT3x...' },
+] as const
+
 type PresetField = { key: string; label: string; placeholder: string }
 
 function formatTime(ms: number): string {
@@ -34,7 +40,7 @@ export function SecretsScreen(): JSX.Element {
   const [newValue, setNewValue] = useState('')
 
   // Preset form (one of: null | 'aws' | 'azure')
-  const [preset, setPreset] = useState<null | 'aws' | 'azure'>(null)
+  const [preset, setPreset] = useState<null | 'aws' | 'azure' | 'atlassian'>(null)
   const [presetValues, setPresetValues] = useState<Record<string, string>>({})
 
   const refresh = useCallback(async () => {
@@ -65,7 +71,10 @@ export function SecretsScreen(): JSX.Element {
 
   const submitPreset = async () => {
     if (!preset) return
-    const fields: readonly PresetField[] = preset === 'aws' ? AWS_PRESET : AZURE_PRESET
+    const fields: readonly PresetField[] =
+      preset === 'aws' ? AWS_PRESET
+      : preset === 'azure' ? AZURE_PRESET
+      : ATLASSIAN_PRESET
     setBusy(true); setErr(null)
     try {
       for (const f of fields) {
@@ -90,7 +99,15 @@ export function SecretsScreen(): JSX.Element {
   }
 
   const presetFields: readonly PresetField[] | null =
-    preset === 'aws' ? AWS_PRESET : preset === 'azure' ? AZURE_PRESET : null
+    preset === 'aws' ? AWS_PRESET
+    : preset === 'azure' ? AZURE_PRESET
+    : preset === 'atlassian' ? ATLASSIAN_PRESET
+    : null
+  const presetTitle =
+    preset === 'aws' ? 'AWS credentials'
+    : preset === 'azure' ? 'Azure service principal'
+    : preset === 'atlassian' ? 'Jira / Confluence'
+    : ''
 
   return (
     <div className="kb-screen secrets-screen" data-testid="secrets">
@@ -116,11 +133,17 @@ export function SecretsScreen(): JSX.Element {
           onClick={() => { setPreset('azure'); setPresetValues({}) }}
           data-testid="secrets-preset-azure"
         >+ Add Azure SP</button>
+        <button
+          type="button"
+          className="btn btn-accent"
+          onClick={() => { setPreset('atlassian'); setPresetValues({}) }}
+          data-testid="secrets-preset-atlassian"
+        >+ Add Jira / Confluence</button>
       </div>
 
       {presetFields ? (
         <div className="secrets-preset-form" data-testid={`secrets-preset-${preset}`}>
-          <h3>{preset === 'aws' ? 'AWS credentials' : 'Azure service principal'}</h3>
+          <h3>{presetTitle}</h3>
           {presetFields.map((f) => (
             <div className="secrets-preset-row" key={f.key}>
               <label>{f.label}</label>
