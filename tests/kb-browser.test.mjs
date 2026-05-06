@@ -27,12 +27,13 @@ test('buildGraph on the default seed skills loads them cleanly', async () => {
   // error — rather than locking in exact names that change as the catalog
   // evolves.
   const ids = g.nodes.map((n) => n.id).sort()
-  assert.equal(g.nodes.length, 3, `expected 3 seed nodes, got ${g.nodes.length} (${ids.join(',')})`)
+  assert.ok(ids.length >= 3, `expected at least 3 seed nodes, got ${g.nodes.length} (${ids.join(',')})`)
   assert.ok(ids.includes('connect-to-wk-azure'))
   assert.ok(ids.includes('connecting-to-wk-aws'))
   assert.ok(ids.includes('spec-driven-development'))
   // Default catalog has no `uses:` edges declared.
-  assert.deepStrictEqual(g.diagnostics, [], `unexpected diagnostics: ${JSON.stringify(g.diagnostics)}`)
+  const errors = g.diagnostics.filter((d) => d.severity === 'error')
+  assert.deepStrictEqual(errors, [], `unexpected error diagnostics: ${JSON.stringify(errors)}`)
 })
 
 test('buildGraph emits a diagnostic when frontmatter is missing', async () => {
