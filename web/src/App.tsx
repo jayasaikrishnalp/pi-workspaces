@@ -8,6 +8,9 @@ import { PlaceholderScreen } from './components/screens/PlaceholderScreen'
 import { DashboardScreen } from './components/screens/DashboardScreen'
 import { ChatScreen } from './components/screens/ChatScreen'
 import { GraphScreen } from './components/screens/GraphScreen'
+import { SkillsScreen } from './components/screens/SkillsScreen'
+import { SoulsScreen } from './components/screens/SoulsScreen'
+import { MemoryScreen } from './components/screens/MemoryScreen'
 import { Login } from './components/Login'
 import { useApi } from './hooks/useApi'
 import { probe } from './lib/api'
@@ -80,6 +83,12 @@ export function App(): JSX.Element {
             <ChatScreen />
           ) : active === 'graph' ? (
             <GraphScreen />
+          ) : active === 'skills' ? (
+            <SkillsScreen />
+          ) : active === 'souls' ? (
+            <SoulsScreen />
+          ) : active === 'memory' ? (
+            <MemoryScreen />
           ) : (
             <PlaceholderScreen id={active} preview={isPreview} />
           )}

@@ -30,9 +30,10 @@ test('shell: sidebar starts expanded and collapses on click', async ({ page, sta
 
 test('shell: clicking a sidebar item swaps the active screen', async ({ page, state }) => {
   await loginAndVisit(page, state)
-  await page.getByTestId('sb-item-souls').click()
-  await expect(page.getByTestId('screen-souls')).toBeVisible()
-  await expect(page.locator('[data-testid=workspace-shell]')).toHaveAttribute('data-active', 'souls')
+  // 'jobs' stays a placeholder until phase 6, so its testid is stable across phases.
+  await page.getByTestId('sb-item-jobs').click()
+  await expect(page.getByTestId('screen-jobs')).toBeVisible()
+  await expect(page.locator('[data-testid=workspace-shell]')).toHaveAttribute('data-active', 'jobs')
 })
 
 test('shell: PREVIEW screens render the badge', async ({ page, state }) => {

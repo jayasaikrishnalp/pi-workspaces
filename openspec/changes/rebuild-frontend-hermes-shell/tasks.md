@@ -40,11 +40,11 @@
 
 ## Phase 5 — KB CRUD: Skills + Souls + Memory
 
-- [ ] 5.1 `SkillsScreen.tsx` (list + detail + create + edit) wired to /api/skills + PUT.
-- [ ] 5.2 `SoulsScreen.tsx` (list + create + edit) wired to /api/souls.
-- [ ] 5.3 `MemoryScreen.tsx` (list + read + edit upsert) wired to /api/memory.
-- [ ] 5.4 Playwright `kb-crud.spec.ts` — create a soul, attach to a new agent, verify the embodies edge appears in graph.
-- [ ] 5.5 Phase 5 commit + push.
+- [x] 5.1 `SkillsScreen.tsx` (list + detail + create + edit) wired to /api/skills + PUT.
+- [x] 5.2 `SoulsScreen.tsx` (list + create + edit) wired to /api/souls.
+- [x] 5.3 `MemoryScreen.tsx` (list + read + edit upsert) wired to /api/memory.
+- [x] 5.4 Playwright `kb-crud.spec.ts` — create a soul, attach to a new agent, verify the embodies edge appears in graph.
+- [x] 5.5 Phase 5 commit + push.
 
 ## Phase 6 — Jobs + Tasks + Terminal
 
