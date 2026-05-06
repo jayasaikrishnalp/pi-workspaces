@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { Sidebar, type ScreenId } from './components/Sidebar'
 import { Titlebar } from './components/shell/Titlebar'
@@ -14,6 +14,13 @@ import { MemoryScreen } from './components/screens/MemoryScreen'
 import { JobsScreen } from './components/screens/JobsScreen'
 import { TasksScreen } from './components/screens/TasksScreen'
 import { TerminalScreen } from './components/screens/TerminalScreen'
+import { McpScreen } from './components/screens/McpScreen'
+import { ConfluenceScreen } from './components/screens/ConfluenceScreen'
+import { Settings } from './components/overlays/Settings'
+import { CommandPalette } from './components/overlays/CommandPalette'
+import { Shortcuts } from './components/overlays/Shortcuts'
+import { SaveSkillModal } from './components/overlays/SaveSkillModal'
+import { ToastStack, type Toast } from './components/overlays/ToastStack'
 import { Login } from './components/Login'
 import { useApi } from './hooks/useApi'
 import { probe } from './lib/api'
@@ -30,29 +37,57 @@ function loadActive(): ScreenId {
   const v = localStorage.getItem(STORAGE.active)
   return (v as ScreenId) ?? 'dashboard'
 }
-
-function loadCollapsed(): boolean {
-  return localStorage.getItem(STORAGE.collapsed) === '1'
-}
-
-function loadVibe(): string {
-  return localStorage.getItem(STORAGE.vibe) ?? 'default'
-}
+function loadCollapsed(): boolean { return localStorage.getItem(STORAGE.collapsed) === '1' }
+function loadVibe(): string { return localStorage.getItem(STORAGE.vibe) ?? 'default' }
 
 export function App(): JSX.Element {
   const [active, setActive] = useState<ScreenId>(loadActive)
   const [collapsed, setCollapsed] = useState<boolean>(loadCollapsed)
-  const [vibe, _setVibe] = useState<string>(loadVibe)
+  const [vibe, setVibe] = useState<string>(loadVibe)
   const probeState = useApi('probe', probe)
+
+  // Overlay state
+  const [cmdkOpen, setCmdkOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [saveSkillOpen, setSaveSkillOpen] = useState(false)
+  const [saveSkillBody, setSaveSkillBody] = useState('')
+
+  // Toasts
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const pushToast = useCallback((t: Omit<Toast, 'id'>) => {
+    const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    setToasts((arr) => [...arr, { id, ...t }])
+  }, [])
+  const dismissToast = useCallback((id: string) => setToasts((arr) => arr.filter((x) => x.id !== id)), [])
 
   // Apply vibe class to body.
   useEffect(() => {
     document.body.className = vibe === 'default' ? '' : `vibe-${vibe}`
+    localStorage.setItem(STORAGE.vibe, vibe)
   }, [vibe])
 
   // Persist screen + sidebar state.
   useEffect(() => { localStorage.setItem(STORAGE.active, active) }, [active])
   useEffect(() => { localStorage.setItem(STORAGE.collapsed, collapsed ? '1' : '0') }, [collapsed])
+
+  // Global hotkeys.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const inField = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmdkOpen((v) => !v) }
+      else if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); setSettingsOpen(true) }
+      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); setCollapsed((v) => !v) }
+      else if (e.key === '?' && !inField) { e.preventDefault(); setShortcutsOpen(true) }
+      else if (e.key === 'Escape') {
+        setCmdkOpen(false); setSettingsOpen(false); setShortcutsOpen(false); setSaveSkillOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   if (probeState.unauthorized) {
     return <Login onLoggedIn={() => probeState.reload()} />
@@ -67,6 +102,7 @@ export function App(): JSX.Element {
       className={`workspace-shell ${collapsed ? 'collapsed' : ''}`}
       data-testid="workspace-shell"
       data-active={active}
+      data-vibe={vibe}
     >
       <Sidebar
         active={active}
@@ -75,35 +111,47 @@ export function App(): JSX.Element {
         setCollapsed={setCollapsed}
         skillCount={skillsCount}
         taskCount={tasksCount}
+        onCommandPalette={() => setCmdkOpen(true)}
       />
-      <Titlebar crumbs={['hive', 'vm-prod-43', titleFor(active)]} />
+      <Titlebar
+        crumbs={['hive', 'vm-prod-43', titleFor(active)]}
+        onCmdK={() => setCmdkOpen(true)}
+        onShortcuts={() => setShortcutsOpen(true)}
+        onSettings={() => setSettingsOpen(true)}
+      />
       <div className="main-area">
         <ProbeBanner probe={probeState.data} loading={probeState.loading} />
         <div className="main-content">
-          {active === 'dashboard' ? (
-            <DashboardScreen />
-          ) : active === 'chat' ? (
-            <ChatScreen />
-          ) : active === 'graph' ? (
-            <GraphScreen />
-          ) : active === 'skills' ? (
-            <SkillsScreen />
-          ) : active === 'souls' ? (
-            <SoulsScreen />
-          ) : active === 'memory' ? (
-            <MemoryScreen />
-          ) : active === 'jobs' ? (
-            <JobsScreen />
-          ) : active === 'tasks' ? (
-            <TasksScreen />
-          ) : active === 'terminal' ? (
-            <TerminalScreen />
-          ) : (
-            <PlaceholderScreen id={active} preview={isPreview} />
-          )}
+          {active === 'dashboard' ? <DashboardScreen />
+            : active === 'chat'      ? <ChatScreen onSaveSkill={(body) => { setSaveSkillBody(body); setSaveSkillOpen(true) }} />
+            : active === 'graph'     ? <GraphScreen />
+            : active === 'skills'    ? <SkillsScreen />
+            : active === 'souls'     ? <SoulsScreen />
+            : active === 'memory'    ? <MemoryScreen />
+            : active === 'jobs'      ? <JobsScreen />
+            : active === 'tasks'     ? <TasksScreen />
+            : active === 'terminal'  ? <TerminalScreen />
+            : active === 'mcp'       ? <McpScreen />
+            : active === 'confluence'? <ConfluenceScreen />
+            : <PlaceholderScreen id={active} preview={isPreview} />}
         </div>
       </div>
       <Statusbar probe={probeState.data} />
+
+      <CommandPalette open={cmdkOpen} onClose={() => setCmdkOpen(false)} onPick={(id) => setActive(id)} />
+      <Shortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} vibe={vibe} setVibe={setVibe} />
+      <SaveSkillModal
+        open={saveSkillOpen}
+        onClose={() => setSaveSkillOpen(false)}
+        onSaved={(name) => {
+          setSaveSkillOpen(false)
+          pushToast({ kind: 'success', title: 'Skill saved', message: `${name} written to <kbRoot>/skills/` })
+          setActive('graph')
+        }}
+        initialBody={saveSkillBody}
+      />
+      <ToastStack toasts={toasts} dismiss={dismissToast} />
     </div>
   )
 }

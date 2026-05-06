@@ -4,7 +4,9 @@ import { Composer } from '../chat/Composer'
 import { Message } from '../chat/Message'
 import { useChatStream } from '../../hooks/useChatStream'
 
-export function ChatScreen(): JSX.Element {
+interface Props { onSaveSkill?: (body: string) => void }
+
+export function ChatScreen({ onSaveSkill }: Props = {}): JSX.Element {
   const chat = useChatStream()
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -25,7 +27,7 @@ export function ChatScreen(): JSX.Element {
               <p>Examples: <code>check disk on prod-vm-43</code> · <code>what's the COBRA onboarding flow?</code></p>
             </div>
           ) : (
-            chat.messages.map((m) => <Message key={m.id} msg={m} />)
+            chat.messages.map((m) => <Message key={m.id} msg={m} onSaveSkill={onSaveSkill ? (msg) => onSaveSkill(msg.text) : undefined} />)
           )}
           {chat.error ? (
             <div className="chat-error-banner" data-testid="chat-error">

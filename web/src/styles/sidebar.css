@@ -1517,3 +1517,94 @@
 }
 .terminal-stderr { background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.18); }
 .terminal-audit { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+
+/* =========================================================
+   OVERLAYS (Phase 7)
+   ========================================================= */
+.settings-modal { width: min(640px, 92vw); }
+.settings-section { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+.settings-section:first-of-type { border-top: 0; }
+.settings-vibe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
+.settings-vibe-btn {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px;
+  cursor: pointer; text-align: left; color: inherit; font-family: inherit;
+}
+.settings-vibe-btn:hover { border-color: var(--border-accent); }
+.settings-vibe-btn.active { border-color: var(--accent); background: rgba(29,172,254,0.10); }
+.settings-vibe-name { font-size: 13px; font-weight: 600; }
+.settings-vibe-id { font-size: 10px; color: var(--text-secondary); font-family: var(--font-mono); }
+.settings-provider-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.settings-saved {
+  background: rgba(34,197,94,0.10);
+  border: 1px solid rgba(34,197,94,0.32);
+  border-radius: 6px; padding: 6px 10px;
+  color: var(--green); font-family: var(--font-mono); font-size: 11px;
+}
+
+/* Command palette */
+.cmdk-modal {
+  width: min(640px, 92vw);
+  background: var(--bg-card);
+  border: 1px solid var(--border-accent); border-radius: var(--r-xl);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  max-height: 70vh;
+}
+.cmdk-input {
+  border: 0; outline: none;
+  background: transparent;
+  padding: 14px 18px;
+  font-family: var(--font-mono); font-size: 14px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+}
+.cmdk-list { overflow-y: auto; padding: 6px 0; }
+.cmdk-section {
+  padding: 8px 14px 4px 14px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--text-secondary); text-transform: uppercase;
+}
+.cmdk-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 14px;
+  background: transparent; border: 0; cursor: pointer;
+  text-align: left; color: inherit; font-family: inherit;
+  font-size: 13px;
+}
+.cmdk-item.active { background: rgba(29,172,254,0.10); }
+.cmdk-item:hover { background: rgba(255,255,255,0.04); }
+.cmdk-hint { color: var(--text-secondary); font-size: 11px; font-family: var(--font-mono); margin-left: auto; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Shortcuts */
+.shortcuts-list { display: flex; flex-direction: column; gap: 6px; }
+.shortcuts-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: rgba(255,255,255,0.02); border-radius: 6px; font-size: 13px; }
+.shortcuts-keys { display: flex; gap: 4px; }
+.shortcuts-keys kbd { font-family: var(--font-mono); font-size: 11px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.4); }
+
+/* MCP screen */
+.mcp-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+
+/* Toast stack */
+.toast-stack {
+  position: fixed; right: 16px; bottom: 36px; z-index: 90;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  min-width: 280px; max-width: 380px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-panel);
+  animation: slide-up .25s ease both;
+}
+.toast.gone { opacity: 0; transition: opacity .4s ease; }
+.toast-success { border-left: 3px solid var(--green); }
+.toast-error { border-left: 3px solid var(--red); }
+.toast-title { font-weight: 700; font-size: 13px; }
+.toast-msg { font-size: 12px; color: var(--text-secondary); margin-top: 2px; font-family: var(--font-mono); }

@@ -57,12 +57,12 @@
 
 ## Phase 7 — MCP + Confluence + Settings + Overlays
 
-- [ ] 7.1 `McpScreen.tsx` lists servers + tools, surfaces status pills, allows tool-call test.
-- [ ] 7.2 `ConfluenceScreen.tsx` search + page-detail.
-- [ ] 7.3 `Settings.tsx` overlay — provider switch (PUT /api/providers/active), theme picker (vibe), probe banner toggle.
-- [ ] 7.4 `CommandPalette.tsx` (⌘K) + `Shortcuts.tsx` (?) + `SaveSkillModal.tsx`.
-- [ ] 7.5 Playwright `overlays.spec.ts` — ⌘K opens palette, fuzzy filter works; ? opens shortcuts; settings switches vibe; provider PUT roundtrip.
-- [ ] 7.6 Phase 7 commit + push.
+- [x] 7.1 `McpScreen.tsx` lists servers + tools, surfaces status pills, allows tool-call test.
+- [x] 7.2 `ConfluenceScreen.tsx` search + page-detail.
+- [x] 7.3 `Settings.tsx` overlay — provider switch (PUT /api/providers/active), theme picker (vibe), probe banner toggle.
+- [x] 7.4 `CommandPalette.tsx` (⌘K) + `Shortcuts.tsx` (?) + `SaveSkillModal.tsx`.
+- [x] 7.5 Playwright `overlays.spec.ts` — ⌘K opens palette, fuzzy filter works; ? opens shortcuts; settings switches vibe; provider PUT roundtrip.
+- [x] 7.6 Phase 7 commit + push.
 
 ## Phase 8 — Polish + Hero + Vibes + 4 PREVIEW screens + Smoke
 
