@@ -354,3 +354,16 @@ test('search: specials in query do not crash', async () => {
     assert.equal(r.status, 200)
   } finally { await ctx.stop() }
 })
+
+test('search: query of only FTS specials sanitizes to empty → 400 INVALID_QUERY', async () => {
+  // sanitizeFtsQuery strips/escapes specials; a query like "(()()" reduces to
+  // an empty string after sanitization. The route should treat it the same
+  // way it treats q="" — reject with 400 — not pass an empty MATCH through
+  // to FTS5.
+  const ctx = await bootHttp()
+  try {
+    const r = await jf(ctx.port, '/api/search?q=' + encodeURIComponent('(()()()'))
+    assert.equal(r.status, 400)
+    assert.equal(r.body.error.code, 'INVALID_QUERY')
+  } finally { await ctx.stop() }
+})

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 
 import { reduce, INITIAL_CHAT_STATE, appendUserMessage, type ChatState } from '../lib/streamingMessage'
+import { subscribeNamedEvents, CHAT_EVENT_NAMES } from '../lib/sse'
 
 interface ServerEvent {
   event: string
@@ -55,7 +56,7 @@ export function useChatStream() {
     const url = `/api/chat-events?sessionKey=${encodeURIComponent(sessionKey)}`
     const es = new EventSource(url, { withCredentials: true })
     esRef.current = es
-    const onMessage = (m: MessageEvent) => {
+    const onEvent = (m: MessageEvent) => {
       try {
         const parsed = JSON.parse(m.data) as ServerEvent
         dispatch({ kind: 'event', event: parsed })
@@ -63,15 +64,12 @@ export function useChatStream() {
         console.error('[useChatStream] bad event payload:', err)
       }
     }
-    es.addEventListener('message', onMessage)
-    es.addEventListener('error', () => {
-      // EventSource auto-reconnects with backoff. We don't need to do anything.
-    })
-    return () => {
-      es.removeEventListener('message', onMessage)
-      es.close()
-      esRef.current = null
-    }
+    // The backend writes `event: <name>` lines (see src/server/http-helpers.ts
+    // sseWrite + src/routes/chat-events.ts), so the default 'message' handler
+    // alone misses every frame. Subscribe to every known name PLUS 'message'.
+    const unsub = subscribeNamedEvents(es, CHAT_EVENT_NAMES, onEvent)
+    es.addEventListener('error', () => { /* EventSource auto-reconnects. */ })
+    return () => { unsub(); es.close(); esRef.current = null }
   }, [sessionKey])
 
   const send = useCallback(async (text: string) => {

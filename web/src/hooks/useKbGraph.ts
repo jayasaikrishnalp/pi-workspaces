@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { getKbGraph, type KbGraph } from '../lib/api'
+import { subscribeNamedEvents, KB_EVENT_NAMES } from '../lib/sse'
 
-interface KbEvent {
+interface KbChangedPayload {
   kind: 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir'
   path: string
   skill: string | null
@@ -39,7 +40,7 @@ export function useKbGraph(): KbGraphState & { reload: () => void } {
     const es = new EventSource('/api/kb/events', { withCredentials: true })
     const onMsg = (m: MessageEvent) => {
       try {
-        const evt = JSON.parse(m.data) as KbEvent
+        const evt = JSON.parse(m.data) as KbChangedPayload
         if (evt.kind === 'addDir' || evt.kind === 'unlinkDir') return
         // Coalesce bursts: refetch at most every 250ms.
         if (refreshTimer.current != null) return
@@ -51,9 +52,12 @@ export function useKbGraph(): KbGraphState & { reload: () => void } {
         /* ignore bad payloads */
       }
     }
-    es.addEventListener('message', onMsg)
+    // Backend writes `event: kb.changed` (and heartbeat) lines — subscribe
+    // by name plus 'message' so the hook works against real EventSource AND
+    // any test stubs that omit the event field.
+    const unsub = subscribeNamedEvents(es, KB_EVENT_NAMES, onMsg)
     return () => {
-      es.removeEventListener('message', onMsg)
+      unsub()
       es.close()
       if (refreshTimer.current != null) window.clearTimeout(refreshTimer.current)
       refreshTimer.current = null

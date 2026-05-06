@@ -29,5 +29,5 @@
 - [x] 5.1 Every requirement scenario backed by a test.
 - [x] 5.2 Full local suite green.
 - [x] 5.3 Codex review iterated to clean.
-- [ ] 5.4 Markdown + PDF review bundle.
-- [ ] 5.5 Three commits + push.
+- [x] 5.4 Markdown + PDF review bundle.
+- [x] 5.5 Three commits + push.

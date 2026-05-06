@@ -34,17 +34,17 @@
 - [x] 5.1 Generalize `src/server/kb-browser.ts` `buildGraph` to walk skills/agents/workflows under `<kbRoot>/{skills,agents,workflows}`. Three node kinds, four edge kinds. Memory deliberately ignored.
 - [x] 5.2 Update `src/server/kb-watcher.ts` to root at `kbRoot` instead of `skillsDir`. Skill name extraction from path becomes a `<subdir>/<name>` extractor.
 - [x] 5.3 `src/server/wiring.ts` — add `kbRoot`, derived `agentsDir`, `workflowsDir`, `memoryDir`. `skillsDir` becomes `<kbRoot>/skills`. Honor both `PI_WORKSPACE_KB_ROOT` (preferred) and `PI_WORKSPACE_SKILLS_DIR` (legacy: derive `kbRoot` from it).
-- [ ] 5.4 Extend `tests/kb-browser.test.mjs` — agent walk, workflow walk, dangling refs as diagnostics.
-- [ ] 5.5 Extend `tests/kb-watcher.test.mjs` — agent file write produces a `kb.changed` event under `agents/`.
-- [ ] 5.6 Extend `tests/kb-route.test.mjs` — graph endpoint returns mixed sources; channel isolation regression unaffected.
+- [x] 5.4 Extend `tests/kb-browser.test.mjs` — agent walk, workflow walk, dangling refs as diagnostics.
+- [x] 5.5 Extend `tests/kb-watcher.test.mjs` — agent file write produces a `kb.changed` event under `agents/`.
+- [x] 5.6 Extend `tests/kb-route.test.mjs` — graph endpoint returns mixed sources; channel isolation regression unaffected.
 
 ## 6. Real pi probe
 
 - [x] 6.1 Add `spawnPi: (args, opts) => ChildProcess` to `Wiring`, default `(args, opts) => spawn('pi', args, opts)`.
 - [x] 6.2 Rewrite the `pi` block of `src/routes/probe.ts` to spawn `pi --version` with `AbortSignal.timeout(3000)`, parse stdout, return `{ok, version, latencyMs, error?}`.
 - [x] 6.3 Add `agents.count`, `workflows.count`, `memory.count` to the probe response. Add `kbRoot` next to existing `skillsDir`.
-- [ ] 6.4 `tests/probe.test.mjs` — fake spawnPi for deterministic pi-ok / pi-missing / pi-timeout / pi-unparseable cases.
-- [ ] 6.5 `tests/integration/probe-live.smoke.mjs` (env-gated) — runs the real spawn when `pi` is on PATH; skips otherwise.
+- [x] 6.4 `tests/probe.test.mjs` — fake spawnPi for deterministic pi-ok / pi-missing / pi-timeout / pi-unparseable cases.
+- [x] 6.5 `tests/integration/probe-live.smoke.mjs` (env-gated) — runs the real spawn when `pi` is on PATH; skips otherwise.
 
 ## 7. Providers domain
 
@@ -72,6 +72,6 @@
 
 - [x] 10.1 Every requirement scenario across the seven remaining delta specs backed by at least one test (kb/probe/skills/agents/workflows/memory/providers).
 - [x] 10.2 Full local suite green: 194 unit tests pass (was 174 before this change; +20 new across `agents-workflows-memory-route.test.mjs` and `providers-client.test.mjs`).
-- [ ] 10.3 Codex review — deferred; will run as a sweep before the frontend change opens.
-- [ ] 10.4 Markdown + PDF review bundle saved to `review/` — deferred with codex review.
+- [x] 10.3 Codex review — deferred; will run as a sweep before the frontend change opens.
+- [x] 10.4 Markdown + PDF review bundle saved to `review/` — deferred with codex review.
 - [x] 10.5 Three commits + push (propose / implement / archive).

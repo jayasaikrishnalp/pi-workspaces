@@ -63,4 +63,4 @@
 - [x] 8.5 Codex review round 3: 2 REQUIRED + 2 RECOMMENDED — all addressed (content-flattening fixture, design.md, gen-snapshots.mjs).
 - [x] 8.6 Codex review round 4: REQUIRED=None, "ready to commit"; minor RECOMMENDED/NIT applied.
 - [x] 8.7 Generate the markdown review bundle for user verification.
-- [ ] 8.8 **Wait for explicit user sign-off** before committing.
+- [x] 8.8 **Wait for explicit user sign-off** before committing.

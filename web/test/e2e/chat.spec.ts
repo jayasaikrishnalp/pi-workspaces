@@ -37,7 +37,12 @@ async function stubChat(page: import('@playwright/test').Page, opts: { events: C
   })
 
   await page.route(/\/api\/chat-events.*/, async (route) => {
-    const lines = opts.events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')
+    // Emit proper SSE frames: each event includes the `event:` line so the
+    // EventSource named-event listeners fire (matches the real backend's
+    // sseWrite format in src/server/http-helpers.ts).
+    const lines = opts.events
+      .map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e)}\n\n`)
+      .join('')
     await route.fulfill({
       status: 200,
       headers: {

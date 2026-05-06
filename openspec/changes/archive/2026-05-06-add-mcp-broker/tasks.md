@@ -41,7 +41,7 @@
 
 ## 7. Hand-test the end-to-end pipe
 
-- [ ] 7.1 Boot the workspace with a real `REF_API_KEY`, hit `GET /api/mcp/tools`, see Ref + Context7 tools listed.
+- [x] 7.1 Boot the workspace with a real `REF_API_KEY`, hit `GET /api/mcp/tools`, see Ref + Context7 tools listed.
 - [ ] 7.2 Boot pi with the bridge extension installed, send a chat that should trigger `mcp__ref__ref_search_documentation`, observe the tool fires and returns documentation hits.
 - [ ] 7.3 Kill the workspace mid-chat, verify pi stays up and only the MCP tools become unavailable (graceful degradation).
 
@@ -49,5 +49,5 @@
 
 - [x] 8.1 Every requirement scenario in `specs/mcp/spec.md` backed by at least one test.
 - [x] 8.2 Full local suite green.
-- [ ] 8.3 Codex review iterated to clean.
+- [x] 8.3 Codex review iterated to clean.
 - [x] 8.4 Three commits + push (propose / implement / archive).

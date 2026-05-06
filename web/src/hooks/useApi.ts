@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { ApiError } from '../lib/api'
 
@@ -23,21 +23,23 @@ export function useApi<T>(key: unknown, fn: () => Promise<T>): UseApiState<T> {
   const [loading, setLoading] = useState(false)
   const [unauthorized, setUnauthorized] = useState(false)
   const [tick, setTick] = useState(0)
-  const cancelled = useRef(false)
   const reload = useCallback(() => setTick((t) => t + 1), [])
 
   useEffect(() => {
-    cancelled.current = false
+    // Per-effect cancellation — a shared ref would be reset by the next
+    // effect run before the prior fetch resolves, letting stale data
+    // overwrite fresh data when `key` changes mid-flight (S1).
+    let cancelled = false
     setLoading(true)
     fn()
       .then((d) => {
-        if (cancelled.current) return
+        if (cancelled) return
         setData(d)
         setError(null)
         setUnauthorized(false)
       })
       .catch((e: Error) => {
-        if (cancelled.current) return
+        if (cancelled) return
         if (e instanceof ApiError && e.status === 401) {
           setUnauthorized(true)
           setError(null)
@@ -46,9 +48,9 @@ export function useApi<T>(key: unknown, fn: () => Promise<T>): UseApiState<T> {
         }
       })
       .finally(() => {
-        if (!cancelled.current) setLoading(false)
+        if (!cancelled) setLoading(false)
       })
-    return () => { cancelled.current = true }
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, tick])
 

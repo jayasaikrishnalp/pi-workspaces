@@ -23,7 +23,16 @@ export class StdioMcpClient {
       stderr: 'pipe',
     })
     const client = new Client(CLIENT_INFO, { capabilities: {} })
-    await client.connect(transport)
+    try {
+      await client.connect(transport)
+    } catch (err) {
+      // Connect spawned the child but the handshake failed. We MUST close
+      // the transport explicitly — otherwise the npx child hangs around as
+      // a zombie. The broker would not call shutdown() since this.client
+      // is still null.
+      try { await transport.close() } catch { /* swallow */ }
+      throw err
+    }
     this.client = client
     this.transport = transport
   }
