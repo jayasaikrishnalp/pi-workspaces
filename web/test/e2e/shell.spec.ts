@@ -43,9 +43,8 @@ test('shell: PREVIEW screens render the badge', async ({ page, state }) => {
 
 test('probe banner: reflects /api/probe data', async ({ page, state }) => {
   await loginAndVisit(page, state)
-  const banner = page.getByTestId('probe-banner')
-  await expect(banner).toBeVisible()
-  // pi pill exists (ok or err depending on whether real `pi` is on PATH).
-  await expect(page.getByTestId('probe-pill-pi')).toBeVisible()
+  // Wait for the probe to land — banner switches from loading/empty to the
+  // populated form with the pi pill.
+  await expect(page.getByTestId('probe-pill-pi')).toBeVisible({ timeout: 10_000 })
   await expect(page.getByTestId('probe-pill-skills')).toContainText('loaded')
 })

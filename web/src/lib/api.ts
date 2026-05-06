@@ -58,6 +58,67 @@ export interface ProbeResponse {
 
 export const probe = () => api.get<ProbeResponse>('/api/probe')
 
+/* ===== Jobs ===== */
+
+export interface Job {
+  id: string
+  soul_id: string | null
+  agent_id: string | null
+  run_id: string | null
+  session_id: string | null
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  title: string | null
+  source: 'operator' | 'agent' | 'cron'
+  created_at: number
+  started_at: number | null
+  completed_at: number | null
+  summary: string | null
+  error: string | null
+}
+
+export const listJobs = (params?: { status?: string; limit?: number }) => {
+  const qs = new URLSearchParams()
+  if (params?.status) qs.set('status', params.status)
+  if (params?.limit) qs.set('limit', String(params.limit))
+  return api.get<{ jobs: Job[] }>(`/api/jobs${qs.toString() ? '?' + qs : ''}`)
+}
+
+export const getJob = (id: string) => api.get<Job>(`/api/jobs/${encodeURIComponent(id)}`)
+
+export const cancelJob = (id: string) => api.post<Job>(`/api/jobs/${encodeURIComponent(id)}/cancel`)
+
+/* ===== Tasks ===== */
+
+export interface Task {
+  id: string
+  title: string
+  body: string | null
+  status: 'triage' | 'todo' | 'ready' | 'running' | 'blocked' | 'done' | 'archived'
+  priority: number
+  source: 'operator' | 'agent'
+  assignee_soul_id: string | null
+  parent_task_id: string | null
+  linked_job_id: string | null
+  created_by: string | null
+  created_at: number
+  started_at: number | null
+  completed_at: number | null
+  result: string | null
+  idempotency_key: string | null
+}
+
+export const listTasks = (params?: { status?: string; source?: string; limit?: number }) => {
+  const qs = new URLSearchParams()
+  if (params?.status) qs.set('status', params.status)
+  if (params?.source) qs.set('source', params.source)
+  if (params?.limit) qs.set('limit', String(params.limit))
+  return api.get<{ tasks: Task[] }>(`/api/tasks${qs.toString() ? '?' + qs : ''}`)
+}
+
+export const createTask = (body: Partial<Task>) => api.post<Task>('/api/tasks', body)
+export const updateTask = (id: string, patch: Partial<Task>) => api.put<Task>(`/api/tasks/${encodeURIComponent(id)}`, patch)
+export const deleteTask = (id: string) => api.delete<Task>(`/api/tasks/${encodeURIComponent(id)}`)
+
 /* ===== Auth ===== */
 
 export const login = (token: string) => api.post<{ ok: true }>('/api/auth/login', { token })

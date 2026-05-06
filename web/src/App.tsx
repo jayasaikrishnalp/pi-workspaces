@@ -5,6 +5,7 @@ import { Titlebar } from './components/shell/Titlebar'
 import { Statusbar } from './components/shell/Statusbar'
 import { ProbeBanner } from './components/shell/ProbeBanner'
 import { PlaceholderScreen } from './components/screens/PlaceholderScreen'
+import { DashboardScreen } from './components/screens/DashboardScreen'
 import { Login } from './components/Login'
 import { useApi } from './hooks/useApi'
 import { probe } from './lib/api'
@@ -71,7 +72,11 @@ export function App(): JSX.Element {
       <div className="main-area">
         <ProbeBanner probe={probeState.data} loading={probeState.loading} />
         <div className="main-content">
-          <PlaceholderScreen id={active} preview={isPreview} />
+          {active === 'dashboard' ? (
+            <DashboardScreen />
+          ) : (
+            <PlaceholderScreen id={active} preview={isPreview} />
+          )}
         </div>
       </div>
       <Statusbar probe={probeState.data} />

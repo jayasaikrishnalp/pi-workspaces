@@ -1048,3 +1048,88 @@
   text-transform: uppercase;
   margin-left: 8px;
 }
+
+/* =========================================================
+   DASHBOARD (Phase 2)
+   ========================================================= */
+.dashboard { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+.dash-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.dash-header h2 { margin: 0; font-size: 24px; font-weight: 700; }
+.dash-sub { font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono); margin-top: 2px; }
+.dash-mcp { display: flex; gap: 6px; flex-wrap: wrap; }
+.mcp-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px; border-radius: 6px;
+  font-size: 10px; font-weight: 600;
+  font-family: var(--font-mono);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-secondary);
+}
+.mcp-pill.mcp-connected { color: var(--green); border-color: rgba(34, 197, 94, 0.32); }
+.mcp-pill.mcp-error { color: var(--red); border-color: rgba(239, 68, 68, 0.36); }
+.mcp-pill.mcp-connecting { color: var(--yellow); border-color: rgba(234, 179, 8, 0.32); }
+.mcp-pill.mcp-disconnected { color: var(--text-secondary); }
+
+.dash-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+.dash-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.dash-card-label {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.dash-card-value { font-size: 24px; font-weight: 700; font-family: var(--font-mono); }
+.dash-card-hint { font-size: 11px; color: var(--text-secondary); }
+
+.dash-2col { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 900px) { .dash-2col { grid-template-columns: 1fr; } }
+
+.dash-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  min-height: 180px;
+}
+.dash-panel-head { display: flex; align-items: center; justify-content: space-between; }
+.dash-panel-meta { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); }
+.dash-empty { color: var(--text-secondary); font-size: 12px; font-family: var(--font-mono); padding: 14px 0; }
+.dash-rows { display: flex; flex-direction: column; gap: 4px; }
+.dash-row {
+  display: grid; grid-template-columns: 90px 1fr auto;
+  align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: 6px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.dash-row-status {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px; border-radius: 4px;
+  text-align: center;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+}
+.dash-row-status.status-queued    { color: var(--text-secondary); }
+.dash-row-status.status-running   { color: var(--green); border-color: rgba(34, 197, 94, 0.32); }
+.dash-row-status.status-completed { color: var(--accent); border-color: rgba(29, 172, 254, 0.32); }
+.dash-row-status.status-failed    { color: var(--red); border-color: rgba(239, 68, 68, 0.36); }
+.dash-row-status.status-cancelled { color: var(--orange); border-color: rgba(249, 115, 22, 0.32); }
+.dash-row-status.status-triage    { color: var(--text-secondary); }
+.dash-row-status.status-todo      { color: var(--text-secondary); }
+.dash-row-status.status-ready     { color: var(--accent); border-color: rgba(29, 172, 254, 0.32); }
+.dash-row-status.status-blocked   { color: var(--orange); border-color: rgba(249, 115, 22, 0.32); }
+.dash-row-status.status-done      { color: var(--green); border-color: rgba(34, 197, 94, 0.32); }
+.dash-row-status.status-archived  { color: var(--text-secondary); opacity: 0.5; }
+.dash-row-title { font-family: var(--font-mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-row-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); }
