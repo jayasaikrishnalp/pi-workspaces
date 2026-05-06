@@ -16,7 +16,11 @@ import { SendRunTracker } from '../src/server/send-run-tracker.ts'
 async function bootHttp({ withWatcher = false } = {}) {
   _resetWiringForTests()
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-route-'))
+  const kbRoot = root
   const skillsDir = path.join(root, 'skills')
+  const agentsDir = path.join(root, 'agents')
+  const workflowsDir = path.join(root, 'workflows')
+  const memoryDir = path.join(root, 'memory')
   fs.mkdirSync(skillsDir, { recursive: true })
   const bus = new ChatEventBus()
   const kbBus = new KbEventBus()
@@ -27,14 +31,16 @@ async function bootHttp({ withWatcher = false } = {}) {
   }
   let watcher = null
   if (withWatcher) {
-    watcher = new KbWatcher({ skillsDir, bus: kbBus, stabilityThreshold: 100, pollInterval: 25 })
+    // Watcher roots at kbRoot in production; tests do the same.
+    watcher = new KbWatcher({ skillsDir: kbRoot, bus: kbBus, stabilityThreshold: 100, pollInterval: 25 })
     await watcher.start()
   }
   globalThis.__wiring = {
     bus, runStore, tracker, bridge,
     sessions: new Map(),
-    kbBus, skillsDir, watcher,
+    kbBus, kbRoot, skillsDir, agentsDir, workflowsDir, memoryDir, watcher,
     confluence: null, confluenceConfigured: false,
+    spawnPi: () => { throw new Error('test wiring: spawnPi not stubbed') },
   }
   const net = await import('node:net')
   const port = await new Promise((resolve) => {

@@ -1,114 +1,131 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import type { Diagnostic, KbGraph, SkillEdge, SkillNode } from '../types/kb.js'
+import type { Diagnostic, KbGraph, KbNodeKind, SkillEdge, SkillNode } from '../types/kb.js'
+import { decodeSteps } from './workflow-writer.js'
 
-interface ParsedSkill {
-  /** SKILL.md path relative to skillsDir. */
+const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/
+const WIKILINK_RE = /\[\[([a-zA-Z0-9_-]+)\]\]/g
+const FENCED_CODE_RE = /```[\s\S]*?```/g
+
+const KIND_FILE: Record<KbNodeKind, string> = {
+  skill: 'SKILL.md',
+  agent: 'AGENT.md',
+  workflow: 'WORKFLOW.md',
+}
+
+const KIND_SUBDIR: Record<KbNodeKind, string> = {
+  skill: 'skills',
+  agent: 'agents',
+  workflow: 'workflows',
+}
+
+interface ParsedEntity {
+  kind: KbNodeKind
+  /** Path relative to kbRoot, e.g. "agents/sre-bot/AGENT.md". */
   relPath: string
   frontmatter: Record<string, unknown>
   body: string
 }
 
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/
-
-const WIKILINK_RE = /\[\[([a-zA-Z0-9_-]+)\]\]/g
-const FENCED_CODE_RE = /```[\s\S]*?```/g
-
 /**
- * Walk skillsDir, parse every <name>/SKILL.md into a graph.
- * Stateless — every call re-walks. ≤500 skills runs in <50ms warm.
+ * Walk all three KB kinds under kbRoot and produce a unified graph.
+ *
+ *   <kbRoot>/skills/<name>/SKILL.md
+ *   <kbRoot>/agents/<name>/AGENT.md
+ *   <kbRoot>/workflows/<name>/WORKFLOW.md
+ *
+ * Memory files (`<kbRoot>/memory/*.md`) are intentionally NOT walked — memory
+ * is operator-owned text, separate from the entity graph.
+ *
+ * Stateless. ≤500 entities runs in <50ms warm.
  */
-export async function buildGraph(skillsDir: string): Promise<KbGraph> {
+export async function buildGraph(kbRoot: string): Promise<KbGraph> {
   const nodes: SkillNode[] = []
   const edges: SkillEdge[] = []
   const diagnostics: Diagnostic[] = []
-  const knownIds = new Set<string>()
-
-  let entries: string[] = []
-  try {
-    entries = await fs.readdir(skillsDir)
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
-      // No skills dir yet — empty graph, no diagnostics.
-      return { nodes: [], edges: [], diagnostics: [] }
-    }
-    throw err
+  const idsByKind: Record<KbNodeKind, Set<string>> = {
+    skill: new Set(),
+    agent: new Set(),
+    workflow: new Set(),
   }
 
-  // First pass: parse and collect nodes.
-  const parsed: ParsedSkill[] = []
-  for (const entry of entries) {
-    const dir = path.join(skillsDir, entry)
-    let stat
+  // First pass: parse every entity, collect ids per kind.
+  const parsed: ParsedEntity[] = []
+  for (const kind of ['skill', 'agent', 'workflow'] as const) {
+    const subdir = path.join(kbRoot, KIND_SUBDIR[kind])
+    let dirEntries: string[]
     try {
-      stat = await fs.stat(dir)
-    } catch {
-      continue
-    }
-    if (!stat.isDirectory()) continue
-    const skillPath = path.join(dir, 'SKILL.md')
-    const relPath = path.relative(skillsDir, skillPath)
-    let raw: string
-    try {
-      raw = await fs.readFile(skillPath, 'utf8')
+      dirEntries = await fs.readdir(subdir)
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') continue
+      throw err
+    }
+    for (const entry of dirEntries) {
+      const entityDir = path.join(subdir, entry)
+      let stat
+      try {
+        stat = await fs.stat(entityDir)
+      } catch {
+        continue
+      }
+      if (!stat.isDirectory()) continue
+      const fileName = KIND_FILE[kind]
+      const filePath = path.join(entityDir, fileName)
+      const relPath = path.posix.join(KIND_SUBDIR[kind], entry, fileName)
+      let raw: string
+      try {
+        raw = await fs.readFile(filePath, 'utf8')
+      } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          diagnostics.push({
+            path: relPath,
+            severity: 'warn',
+            message: `directory ${KIND_SUBDIR[kind]}/${entry}/ has no ${fileName}`,
+          })
+          continue
+        }
+        throw err
+      }
+      const m = FRONTMATTER_RE.exec(raw)
+      if (!m) {
         diagnostics.push({
           path: relPath,
-          severity: 'warn',
-          message: `directory ${entry}/ has no SKILL.md`,
+          severity: 'error',
+          message: 'no YAML frontmatter (expected leading `---` and trailing `---` lines)',
         })
         continue
       }
-      throw err
+      const frontmatterRaw = m[1] as string
+      const body = (m[2] ?? '') as string
+      let frontmatter: Record<string, unknown>
+      try {
+        frontmatter = parseSimpleFrontmatter(frontmatterRaw)
+      } catch (err) {
+        diagnostics.push({
+          path: relPath,
+          severity: 'error',
+          message: `frontmatter parse failed: ${(err as Error).message}`,
+        })
+        continue
+      }
+      if (typeof frontmatter.name !== 'string' || frontmatter.name.length === 0) {
+        diagnostics.push({
+          path: relPath,
+          severity: 'error',
+          message: 'missing required `name` field',
+        })
+        continue
+      }
+      parsed.push({ kind, relPath, frontmatter, body })
+      idsByKind[kind].add(frontmatter.name as string)
     }
-
-    const m = FRONTMATTER_RE.exec(raw)
-    if (!m) {
-      diagnostics.push({
-        path: relPath,
-        severity: 'error',
-        message: 'no YAML frontmatter (expected leading `---` and trailing `---` lines)',
-      })
-      continue
-    }
-    const frontmatterRaw = m[1] as string
-    const body = (m[2] ?? '') as string
-
-    let frontmatter: Record<string, unknown>
-    try {
-      frontmatter = parseSimpleFrontmatter(frontmatterRaw)
-    } catch (err) {
-      diagnostics.push({
-        path: relPath,
-        severity: 'error',
-        message: `frontmatter parse failed: ${(err as Error).message}`,
-      })
-      continue
-    }
-
-    if (typeof frontmatter.name !== 'string' || frontmatter.name.length === 0) {
-      diagnostics.push({
-        path: relPath,
-        severity: 'error',
-        message: 'missing required `name` field',
-      })
-      continue
-    }
-    parsed.push({ relPath, frontmatter, body })
-    knownIds.add(frontmatter.name)
   }
 
-  // Second pass: build nodes + edges, validating cross-references.
+  // Second pass: produce nodes + edges and validate cross-references.
   for (const p of parsed) {
     const id = p.frontmatter.name as string
-    const node: SkillNode = {
-      id,
-      name: id,
-      path: p.relPath,
-      source: 'skill',
-    }
+    const node: SkillNode = { id, name: id, path: p.relPath, source: p.kind }
     if (typeof p.frontmatter.description === 'string') {
       node.description = p.frontmatter.description
     }
@@ -118,80 +135,106 @@ export async function buildGraph(skillsDir: string): Promise<KbGraph> {
     nodes.push(node)
 
     const seenEdges = new Set<string>()
-    const pushEdge = (target: string, kind: 'uses' | 'link') => {
+    const pushEdge = (target: string, kind: SkillEdge['kind']) => {
       const key = `${id}|${target}|${kind}`
       if (seenEdges.has(key)) return
       seenEdges.add(key)
       edges.push({ source: id, target, kind })
     }
 
-    if (Array.isArray(p.frontmatter.uses)) {
-      for (const u of p.frontmatter.uses) {
-        if (typeof u !== 'string') continue
-        if (!knownIds.has(u)) {
+    if (p.kind === 'skill') {
+      // Skill: uses[] (frontmatter) + [[wikilinks]] in body.
+      if (Array.isArray(p.frontmatter.uses)) {
+        for (const u of p.frontmatter.uses) {
+          if (typeof u !== 'string') continue
+          if (!idsByKind.skill.has(u)) {
+            diagnostics.push({
+              path: p.relPath,
+              severity: 'warn',
+              message: `\`uses\` references unknown skill "${u}"`,
+            })
+            continue
+          }
+          pushEdge(u, 'uses')
+        }
+      }
+      const bodyNoCode = p.body.replace(FENCED_CODE_RE, '')
+      let match: RegExpExecArray | null
+      while ((match = WIKILINK_RE.exec(bodyNoCode)) !== null) {
+        const ref = match[1] as string
+        if (!idsByKind.skill.has(ref)) {
           diagnostics.push({
             path: p.relPath,
             severity: 'warn',
-            message: `\`uses\` references unknown skill "${u}"`,
+            message: `body wikilink \`[[${ref}]]\` does not match any known skill`,
           })
           continue
         }
-        pushEdge(u, 'uses')
+        pushEdge(ref, 'link')
       }
-    }
-
-    // Strip fenced code blocks so wikilinks inside code samples don't create edges.
-    const bodyNoCode = p.body.replace(FENCED_CODE_RE, '')
-    let match: RegExpExecArray | null
-    while ((match = WIKILINK_RE.exec(bodyNoCode)) !== null) {
-      const ref = match[1] as string
-      if (!knownIds.has(ref)) {
+    } else if (p.kind === 'agent') {
+      // Agent: composes edges from skills[].
+      if (Array.isArray(p.frontmatter.skills)) {
+        for (const s of p.frontmatter.skills) {
+          if (typeof s !== 'string') continue
+          if (!idsByKind.skill.has(s)) {
+            diagnostics.push({
+              path: p.relPath,
+              severity: 'warn',
+              message: `\`skills\` references unknown skill "${s}"`,
+            })
+            continue
+          }
+          pushEdge(s, 'composes')
+        }
+      } else {
         diagnostics.push({
           path: p.relPath,
           severity: 'warn',
-          message: `body wikilink \`[[${ref}]]\` does not match any known skill`,
+          message: 'agent missing required `skills` array',
         })
-        continue
       }
-      pushEdge(ref, 'link')
+    } else {
+      // Workflow: step edges from steps[]. Steps are encoded as "<kind>:<ref>".
+      const steps = decodeSteps(p.frontmatter.steps)
+      if (steps.length === 0) {
+        diagnostics.push({
+          path: p.relPath,
+          severity: 'warn',
+          message: 'workflow missing or empty `steps` array',
+        })
+      }
+      for (const step of steps) {
+        const set = step.kind === 'skill' ? idsByKind.skill : idsByKind.workflow
+        if (!set.has(step.ref)) {
+          diagnostics.push({
+            path: p.relPath,
+            severity: 'warn',
+            message: `step references unknown ${step.kind} "${step.ref}"`,
+          })
+          continue
+        }
+        pushEdge(step.ref, 'step')
+      }
     }
   }
 
   return { nodes, edges, diagnostics }
 }
 
-/**
- * Tiny line-oriented parser. Supports:
- *   key: value           (string scalar — value is trimmed; quotes optional)
- *   key: [a, b, c]       (inline array — string elements)
- *   key:                 (block array)
- *     - item
- *     - item
- *
- * Anything richer (multiline strings, nested objects, anchors) throws —
- * skill authors should keep frontmatter shallow.
- */
 function parseSimpleFrontmatter(raw: string): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   const lines = raw.split('\n')
   let i = 0
   while (i < lines.length) {
     const line = lines[i] ?? ''
-    if (line.trim().length === 0) {
-      i++
-      continue
-    }
-    if (/^\s/.test(line)) {
-      throw new Error(`unexpected indent at line ${i + 1}: ${line}`)
-    }
+    if (line.trim().length === 0) { i++; continue }
+    if (/^\s/.test(line)) throw new Error(`unexpected indent at line ${i + 1}: ${line}`)
     const colon = line.indexOf(':')
-    if (colon < 0) {
-      throw new Error(`expected \`key: value\` at line ${i + 1}: ${line}`)
-    }
+    if (colon < 0) throw new Error(`expected \`key: value\` at line ${i + 1}: ${line}`)
     const key = line.slice(0, colon).trim()
     const after = line.slice(colon + 1).trim()
     if (after.length === 0) {
-      // Block array follows.
       const items: unknown[] = []
       i++
       while (i < lines.length && /^\s/.test(lines[i] ?? '')) {
@@ -204,7 +247,6 @@ function parseSimpleFrontmatter(raw: string): Record<string, unknown> {
       out[key] = items
       continue
     }
-    // Inline array. Both brackets must be present, and items must be non-empty strings.
     if (after.startsWith('[') || after.endsWith(']')) {
       if (!(after.startsWith('[') && after.endsWith(']'))) {
         throw new Error(`unbalanced inline array at line ${i + 1}: ${line}`)
@@ -220,11 +262,7 @@ function parseSimpleFrontmatter(raw: string): Record<string, unknown> {
       i++
       continue
     }
-    // Inline object / unsupported nested YAML.
-    if (after.startsWith('{')) {
-      throw new Error(`inline objects are not supported at line ${i + 1}: ${line}`)
-    }
-    // Tagged or anchored values reach beyond this parser's contract.
+    if (after.startsWith('{')) throw new Error(`inline objects are not supported at line ${i + 1}: ${line}`)
     if (after.startsWith('!') || after.startsWith('&') || after.startsWith('*')) {
       throw new Error(`anchor/tag/alias is not supported at line ${i + 1}: ${line}`)
     }
@@ -241,12 +279,29 @@ function stripQuotes(s: string): string {
   return s
 }
 
-/** Extract the skill name from an absolute path under skillsDir, if applicable. */
-export function skillNameForPath(skillsDir: string, absPath: string): string | null {
-  const rel = path.relative(skillsDir, absPath)
+/**
+ * Extract the entity name from an absolute path under kbRoot, if applicable.
+ *
+ *   <kbRoot>/skills/<name>/SKILL.md   → "<name>"
+ *   <kbRoot>/agents/<name>/AGENT.md   → "<name>"
+ *   <kbRoot>/workflows/<name>/...     → "<name>"
+ *   <kbRoot>/memory/<name>.md         → "<name>"
+ *   anything else                     → null
+ */
+export function skillNameForPath(kbRoot: string, absPath: string): string | null {
+  const rel = path.relative(kbRoot, absPath)
   if (rel.startsWith('..')) return null
-  // Skill files live at <skillsDir>/<name>/SKILL.md. Anything else returns null.
   const segments = rel.split(path.sep)
   if (segments.length < 2) return null
-  return segments[0] ?? null
+  const subdir = segments[0]
+  if (subdir === 'memory') {
+    // For memory: <kbRoot>/memory/<name>.md → name without .md
+    const last = segments[segments.length - 1] ?? ''
+    if (last.endsWith('.md')) return last.slice(0, -3)
+    return null
+  }
+  if (subdir === 'skills' || subdir === 'agents' || subdir === 'workflows') {
+    return segments[1] ?? null
+  }
+  return null
 }

@@ -30,6 +30,8 @@ function waitForEvent(bus, predicate, timeoutMs = 2_000) {
 
 test('atomic tmp+rename produces exactly one add event', async () => {
   const dir = tmpSkillsDir()
+  // Pre-create the skills/ subdir so the watcher (rooted at kbRoot) sees it.
+  fs.mkdirSync(path.join(dir, 'skills'), { recursive: true })
   const bus = new KbEventBus()
   const watcher = new KbWatcher({
     skillsDir: dir,
@@ -41,7 +43,7 @@ test('atomic tmp+rename produces exactly one add event', async () => {
   try {
     const events = []
     bus.subscribe((e) => events.push(e))
-    const skillDir = path.join(dir, 'new-skill')
+    const skillDir = path.join(dir, 'skills', 'new-skill')
     fs.mkdirSync(skillDir, { recursive: true })
     const tmp = path.join(skillDir, 'SKILL.md.tmp')
     const final = path.join(skillDir, 'SKILL.md')
@@ -62,13 +64,12 @@ test('atomic tmp+rename produces exactly one add event', async () => {
 
 test('unlink emits unlink event AND subsequent buildGraph excludes the removed skill', async () => {
   const dir = tmpSkillsDir()
-  // Pre-populate so the unlink target exists when the watcher starts.
-  const skillDir = path.join(dir, 'will-go')
+  // Pre-populate under the new <kbRoot>/skills/<name>/ layout.
+  const skillDir = path.join(dir, 'skills', 'will-go')
   fs.mkdirSync(skillDir, { recursive: true })
   const skillPath = path.join(skillDir, 'SKILL.md')
   fs.writeFileSync(skillPath, `---\nname: will-go\n---\n`)
-  // A second skill so the graph isn't empty after unlink.
-  const stayDir = path.join(dir, 'will-stay')
+  const stayDir = path.join(dir, 'skills', 'will-stay')
   fs.mkdirSync(stayDir, { recursive: true })
   fs.writeFileSync(path.join(stayDir, 'SKILL.md'), `---\nname: will-stay\n---\n`)
 
@@ -100,7 +101,7 @@ test('unlink emits unlink event AND subsequent buildGraph excludes the removed s
 
 test('initial scan emits add events for pre-existing files (ignoreInitial:false)', async () => {
   const dir = tmpSkillsDir()
-  const skillDir = path.join(dir, 'pre-existing')
+  const skillDir = path.join(dir, 'skills', 'pre-existing')
   fs.mkdirSync(skillDir, { recursive: true })
   fs.writeFileSync(path.join(skillDir, 'SKILL.md'), `---\nname: pre-existing\n---\n`)
 

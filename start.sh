@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 
 REPO_ROOT="$(pwd)"
 PI_WORKSPACE_ROOT="${PI_WORKSPACE_ROOT:-$HOME/.pi-workspace}"
-SKILLS_DIR="${PI_WORKSPACE_SKILLS_DIR:-$REPO_ROOT/seed-skills}"
+KB_ROOT="${PI_WORKSPACE_KB_ROOT:-$REPO_ROOT/seed-skills}"
 PORT="${PORT:-8766}"
 
 mkdir -p "$PI_WORKSPACE_ROOT"
@@ -43,7 +43,7 @@ trap cleanup INT TERM EXIT
 echo "[start] backend → http://127.0.0.1:$PORT"
 PORT="$PORT" \
   PI_WORKSPACE_ROOT="$PI_WORKSPACE_ROOT" \
-  PI_WORKSPACE_SKILLS_DIR="$SKILLS_DIR" \
+  PI_WORKSPACE_KB_ROOT="$KB_ROOT" \
   node --import tsx src/server.ts &
 PIDS+=($!)
 

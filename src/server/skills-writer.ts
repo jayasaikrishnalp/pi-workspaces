@@ -9,11 +9,29 @@ export const SKILL_NAME_RE = /^[a-z][a-z0-9-]{0,63}$/
  */
 export const MAX_BODY_CHARS = 32_768
 
+/**
+ * Shared error code set for skills/agents/workflows writers. Memory writer
+ * has its own simpler error type since memory has no name regex / frontmatter
+ * concerns.
+ */
 export type SkillWriteErrorCode =
+  // Skill-specific (kept for back-compat)
   | 'INVALID_SKILL_NAME'
+  | 'SKILL_EXISTS'
+  | 'UNKNOWN_SKILL'
+  // Agent-specific
+  | 'INVALID_AGENT_NAME'
+  | 'INVALID_AGENT_SKILLS'
+  | 'AGENT_EXISTS'
+  | 'UNKNOWN_AGENT'
+  // Workflow-specific
+  | 'INVALID_WORKFLOW_NAME'
+  | 'INVALID_WORKFLOW_STEPS'
+  | 'WORKFLOW_EXISTS'
+  | 'UNKNOWN_WORKFLOW'
+  // Shared
   | 'INVALID_FRONTMATTER'
   | 'BODY_TOO_LARGE'
-  | 'SKILL_EXISTS'
   | 'INTERNAL'
 
 export class SkillWriteError extends Error {

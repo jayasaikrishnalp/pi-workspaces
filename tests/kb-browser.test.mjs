@@ -6,12 +6,14 @@ import path from 'node:path'
 
 import { buildGraph, skillNameForPath } from '../src/server/kb-browser.ts'
 
+/** Returns a tmp kbRoot. Tests use kbRoot/skills/<name>/SKILL.md layout. */
 function tmpSkillsDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'kb-browser-'))
 }
 
-function writeSkill(skillsDir, name, content) {
-  const dir = path.join(skillsDir, name)
+/** Writes a skill at <kbRoot>/skills/<name>/SKILL.md (the new layout). */
+function writeSkill(kbRoot, name, content) {
+  const dir = path.join(kbRoot, 'skills', name)
   fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(path.join(dir, 'SKILL.md'), content)
 }
@@ -147,7 +149,7 @@ test('buildGraph: missing skillsDir returns empty graph (not an error)', async (
 
 test('buildGraph: directory with no SKILL.md emits a warn diagnostic', async () => {
   const dir = tmpSkillsDir()
-  fs.mkdirSync(path.join(dir, 'empty-skill'), { recursive: true })
+  fs.mkdirSync(path.join(dir, 'skills', 'empty-skill'), { recursive: true })
   const g = await buildGraph(dir)
   assert.equal(g.nodes.length, 0)
   const diag = g.diagnostics.find((d) => d.message.includes('no SKILL.md'))
@@ -219,10 +221,16 @@ for (const [label, content, expected] of PARSER_FAIL) {
   })
 }
 
-test('skillNameForPath extracts skill name from path', () => {
-  const skillsDir = '/x/y'
-  assert.equal(skillNameForPath(skillsDir, '/x/y/foo/SKILL.md'), 'foo')
-  assert.equal(skillNameForPath(skillsDir, '/x/y/foo/sub/file'), 'foo')
-  // outside skillsDir
-  assert.equal(skillNameForPath(skillsDir, '/x/z/foo/SKILL.md'), null)
+test('skillNameForPath extracts entity name from path under each subdir', () => {
+  const kbRoot = '/x/y'
+  // Skills/agents/workflows: <kbRoot>/<subdir>/<name>/...
+  assert.equal(skillNameForPath(kbRoot, '/x/y/skills/foo/SKILL.md'), 'foo')
+  assert.equal(skillNameForPath(kbRoot, '/x/y/agents/sre-bot/AGENT.md'), 'sre-bot')
+  assert.equal(skillNameForPath(kbRoot, '/x/y/workflows/safe-reboot/WORKFLOW.md'), 'safe-reboot')
+  // Memory: <kbRoot>/memory/<name>.md (file, no subdir)
+  assert.equal(skillNameForPath(kbRoot, '/x/y/memory/preferences.md'), 'preferences')
+  // Outside kbRoot
+  assert.equal(skillNameForPath(kbRoot, '/x/z/skills/foo/SKILL.md'), null)
+  // Inside kbRoot but not a recognized subdir
+  assert.equal(skillNameForPath(kbRoot, '/x/y/random/foo'), null)
 })

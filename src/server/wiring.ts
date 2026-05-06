@@ -1,5 +1,6 @@
 import path from 'node:path'
 import os from 'node:os'
+import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 
 import { ChatEventBus, getChatEventBus } from './chat-event-bus.js'
 import { RunStore } from './run-store.js'
@@ -11,6 +12,8 @@ import { ConfluenceClient, ALLOWED_BASE_URL } from './confluence-client.js'
 import { AuthStore, getAuthStore } from './auth-store.js'
 import type { SessionInfo } from '../types/run.js'
 
+export type SpawnPi = (args: readonly string[], opts?: SpawnOptions) => ChildProcess
+
 export interface Wiring {
   bus: ChatEventBus
   runStore: RunStore
@@ -18,8 +21,13 @@ export interface Wiring {
   bridge: PiRpcBridge
   sessions: Map<string, SessionInfo>
   kbBus: KbEventBus
-  /** Absolute path to the skills directory under the workspace cwd. */
+  /** Root of the KB tree on disk; subdirs are skills/, agents/, workflows/, memory/. */
+  kbRoot: string
+  /** Back-compat alias for `<kbRoot>/skills`. */
   skillsDir: string
+  agentsDir: string
+  workflowsDir: string
+  memoryDir: string
   watcher: KbWatcher | null
   /** null when CONFLUENCE_BASE_URL / tokens are missing or misconfigured. */
   confluence: ConfluenceClient | null
@@ -27,17 +35,26 @@ export interface Wiring {
   confluenceConfigError?: string
   /** Per-workspace auth store. null only when test wiring opts out. */
   authStore: AuthStore | null
-  /** Absolute path to the workspace root (for probe + diagnostics). */
+  /** Absolute path to the workspace data root (for probe + diagnostics). */
   workspaceRoot: string
+  /** Spawn callback for `pi`. Override in tests; defaults to spawning `pi`. */
+  spawnPi: SpawnPi
 }
 
 export interface WiringOptions {
   workspaceRoot?: string
   runStore?: RunStore
-  /** Override skillsDir for tests. Defaults to <cwd>/.pi/skills. */
+  /** Override the kb root directory. Defaults to <cwd>/.pi. */
+  kbRoot?: string
+  /**
+   * Legacy: override the skills directory. The kbRoot is then `path.dirname(skillsDir)`.
+   * Prefer `kbRoot` for new code; this stays for back-compat with existing tests.
+   */
   skillsDir?: string
   /** Whether to instantiate the chokidar watcher. Tests usually pass false. */
   startWatcher?: boolean
+  /** Override pi spawn (testing). */
+  spawnPi?: SpawnPi
 }
 
 declare global {
@@ -57,21 +74,30 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   const bridge = getPiRpcBridge({ runStore, bus, tracker })
   const sessions = new Map<string, SessionInfo>()
   const kbBus = getKbEventBus()
-  const skillsDir =
-    options.skillsDir ??
-    process.env.PI_WORKSPACE_SKILLS_DIR ??
-    path.join(process.cwd(), '.pi', 'skills')
+
+  // Resolve kbRoot. New env var PI_WORKSPACE_KB_ROOT wins. Legacy
+  // PI_WORKSPACE_SKILLS_DIR (or options.skillsDir) implies kbRoot = its parent.
+  const kbRoot =
+    options.kbRoot ??
+    process.env.PI_WORKSPACE_KB_ROOT ??
+    (options.skillsDir ? path.dirname(options.skillsDir) :
+      process.env.PI_WORKSPACE_SKILLS_DIR ? path.dirname(process.env.PI_WORKSPACE_SKILLS_DIR) :
+      path.join(process.cwd(), '.pi'))
+  const skillsDir = path.join(kbRoot, 'skills')
+  const agentsDir = path.join(kbRoot, 'agents')
+  const workflowsDir = path.join(kbRoot, 'workflows')
+  const memoryDir = path.join(kbRoot, 'memory')
+
   let watcher: KbWatcher | null = null
   if (options.startWatcher !== false && process.env.PI_WORKSPACE_DISABLE_WATCHER !== '1') {
-    watcher = new KbWatcher({ skillsDir, bus: kbBus })
-    // Fire-and-forget; the watcher promise resolves on chokidar 'ready'.
+    // Watcher roots at kbRoot so it picks up changes under skills/agents/workflows/memory.
+    watcher = new KbWatcher({ skillsDir: kbRoot, bus: kbBus })
     void watcher.start().catch((err) => {
       console.error('[wiring] kb watcher failed to start:', err)
     })
   }
-  // Lazy Confluence client: only construct if env is configured AND the
-  // base URL matches the allowlist. Failures surface as confluenceConfigError
-  // and the routes return 503 CONFLUENCE_UNAVAILABLE.
+
+  // Confluence (unchanged).
   const confluenceBaseUrl = process.env.CONFLUENCE_BASE_URL ?? ALLOWED_BASE_URL
   const confluenceEmail = process.env.ATLASSIAN_EMAIL ?? ''
   const confluenceToken = process.env.ATLASSIAN_API_TOKEN ?? process.env.JIRA_TOKEN ?? ''
@@ -93,16 +119,17 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     confluenceConfigError = 'CONFLUENCE_BASE_URL / ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN (or JIRA_TOKEN) not all set'
   }
 
-  // Auth store: lazy-loaded (token + sessions read from disk on first use).
   const authStore = getAuthStore({ workspaceRoot: root })
+  const spawnPi: SpawnPi = options.spawnPi ?? ((args, opts) => spawn('pi', [...args], opts ?? {}))
 
   const w: Wiring = {
-    bus, runStore, tracker, bridge, sessions, kbBus, skillsDir, watcher,
+    bus, runStore, tracker, bridge, sessions, kbBus,
+    kbRoot, skillsDir, agentsDir, workflowsDir, memoryDir,
+    watcher,
     confluence, confluenceConfigured, confluenceConfigError,
-    authStore, workspaceRoot: root,
+    authStore, workspaceRoot: root, spawnPi,
   }
   globalThis.__wiring = w
-  // Fire-and-forget load — the middleware tolerates an in-flight load.
   void authStore.load().catch((err) => {
     console.error('[wiring] auth store load failed:', err)
   })

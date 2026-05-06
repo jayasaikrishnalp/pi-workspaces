@@ -15,8 +15,10 @@ import {
   SkillWriteError,
   SKILL_NAME_RE,
 } from '../server/skills-writer.js'
+import { readKbFile, updateKbFile } from '../server/kb-writer.js'
 
 export const SKILLS_CREATE_PATH = '/api/skills'
+export const SKILLS_DETAIL_PATTERN = '/api/skills/:name'
 export const KB_SKILL_GET_PATTERN = '/api/kb/skill/:name'
 
 export async function handleSkillsCreate(
@@ -158,4 +160,71 @@ function parseFrontmatterShallow(raw: string): Record<string, unknown> {
 function strip(s: string): string {
   if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) return s.slice(1, -1)
   return s
+}
+
+/**
+ * Live edit of an existing skill. Merge semantics:
+ *  - omitted body → existing body kept
+ *  - omitted frontmatter → existing frontmatter kept
+ *  - provided frontmatter → REPLACES prior, except `name` (locked)
+ */
+export async function handleSkillsUpdate(
+  req: IncomingMessage,
+  res: ServerResponse,
+  w: Wiring,
+): Promise<void> {
+  const params = matchPath(SKILLS_DETAIL_PATTERN, parsePath(req.url))
+  if (!params || !params.name) {
+    jsonError(res, 404, 'NOT_FOUND', 'unknown skills detail path')
+    return
+  }
+  const name: string = params.name
+  if (!SKILL_NAME_RE.test(name)) {
+    jsonError(res, 400, 'INVALID_SKILL_NAME', `name must match ${SKILL_NAME_RE}`)
+    return
+  }
+  let body: unknown
+  try {
+    body = await readJsonBody(req)
+  } catch (err) {
+    jsonError(res, 400, 'BAD_REQUEST', (err as Error).message)
+    return
+  }
+  if (!body || typeof body !== 'object') {
+    jsonError(res, 400, 'BAD_REQUEST', 'body must be a JSON object')
+    return
+  }
+  const { content, frontmatter } = body as Record<string, unknown>
+  if (content !== undefined && typeof content !== 'string') {
+    jsonError(res, 400, 'BAD_REQUEST', 'content must be a string when provided')
+    return
+  }
+  if (frontmatter !== undefined && (typeof frontmatter !== 'object' || frontmatter === null || Array.isArray(frontmatter))) {
+    jsonError(res, 400, 'BAD_REQUEST', 'frontmatter must be a JSON object when provided')
+    return
+  }
+  try {
+    const existing = await readKbFile(w.kbRoot, 'skills', name)
+    const result = await updateKbFile(w.kbRoot, {
+      kind: 'skills',
+      name,
+      body: content as string | undefined,
+      frontmatter: frontmatter as Record<string, unknown> | undefined,
+      existingFrontmatter: existing.frontmatter,
+      existingBody: existing.body,
+    })
+    jsonOk(res, 200, { name, path: result.relPath })
+  } catch (err) {
+    if (err instanceof SkillWriteError) {
+      const status =
+        err.code === 'INVALID_SKILL_NAME' ? 400
+        : err.code === 'BODY_TOO_LARGE' ? 400
+        : err.code === 'INVALID_FRONTMATTER' ? 400
+        : err.code === 'UNKNOWN_SKILL' ? 404
+        : 500
+      jsonError(res, status, err.code, err.message)
+      return
+    }
+    jsonError(res, 500, 'INTERNAL', (err as Error).message)
+  }
 }

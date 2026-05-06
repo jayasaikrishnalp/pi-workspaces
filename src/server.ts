@@ -34,10 +34,42 @@ import {
 } from './routes/confluence.js'
 import {
   handleSkillsCreate,
+  handleSkillsUpdate,
   handleKbSkillGet,
   SKILLS_CREATE_PATH,
+  SKILLS_DETAIL_PATTERN,
   KB_SKILL_GET_PATTERN,
 } from './routes/skills.js'
+import {
+  handleAgentsList,
+  handleAgentsCreate,
+  handleAgentsRead,
+  handleAgentsUpdate,
+  AGENTS_PATH,
+  AGENTS_DETAIL_PATTERN,
+} from './routes/agents.js'
+import {
+  handleWorkflowsList,
+  handleWorkflowsCreate,
+  handleWorkflowsRead,
+  handleWorkflowsUpdate,
+  WORKFLOWS_PATH,
+  WORKFLOWS_DETAIL_PATTERN,
+} from './routes/workflows.js'
+import {
+  handleMemoryList,
+  handleMemoryRead,
+  handleMemoryWrite,
+  MEMORY_PATH,
+  MEMORY_DETAIL_PATTERN,
+} from './routes/memory.js'
+import {
+  handleProvidersList,
+  handleProvidersActiveGet,
+  handleProvidersActiveSet,
+  PROVIDERS_LIST_PATH,
+  PROVIDERS_ACTIVE_PATH,
+} from './routes/providers.js'
 import {
   handleAuthLogin,
   handleAuthLogout,
@@ -80,9 +112,29 @@ const ROUTES: Route[] = [
   { method: 'POST', pattern: CONFLUENCE_SEARCH_PATH, handler: handleConfluenceSearch },
   { method: 'GET', pattern: CONFLUENCE_PAGE_PATTERN, handler: handleConfluencePage },
 
-  // Stage 6 routes — skill creation + read.
+  // Stage 6 routes — skill creation + read + update.
   { method: 'POST', pattern: SKILLS_CREATE_PATH, handler: handleSkillsCreate },
+  { method: 'PUT', pattern: SKILLS_DETAIL_PATTERN, handler: handleSkillsUpdate },
   { method: 'GET', pattern: KB_SKILL_GET_PATTERN, handler: handleKbSkillGet },
+
+  // Change 1 routes — agents/workflows/memory/providers.
+  { method: 'GET', pattern: AGENTS_PATH, handler: handleAgentsList },
+  { method: 'POST', pattern: AGENTS_PATH, handler: handleAgentsCreate },
+  { method: 'GET', pattern: AGENTS_DETAIL_PATTERN, handler: handleAgentsRead },
+  { method: 'PUT', pattern: AGENTS_DETAIL_PATTERN, handler: handleAgentsUpdate },
+
+  { method: 'GET', pattern: WORKFLOWS_PATH, handler: handleWorkflowsList },
+  { method: 'POST', pattern: WORKFLOWS_PATH, handler: handleWorkflowsCreate },
+  { method: 'GET', pattern: WORKFLOWS_DETAIL_PATTERN, handler: handleWorkflowsRead },
+  { method: 'PUT', pattern: WORKFLOWS_DETAIL_PATTERN, handler: handleWorkflowsUpdate },
+
+  { method: 'GET', pattern: MEMORY_PATH, handler: handleMemoryList },
+  { method: 'GET', pattern: MEMORY_DETAIL_PATTERN, handler: handleMemoryRead },
+  { method: 'PUT', pattern: MEMORY_DETAIL_PATTERN, handler: handleMemoryWrite },
+
+  { method: 'GET', pattern: PROVIDERS_LIST_PATH, handler: handleProvidersList },
+  { method: 'GET', pattern: PROVIDERS_ACTIVE_PATH, handler: handleProvidersActiveGet },
+  { method: 'PUT', pattern: PROVIDERS_ACTIVE_PATH, handler: handleProvidersActiveSet },
 
   // Stage 7 routes — auth + capability probe.
   { method: 'POST', pattern: AUTH_LOGIN_PATH, handler: handleAuthLogin },

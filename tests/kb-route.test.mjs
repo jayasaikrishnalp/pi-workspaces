@@ -42,6 +42,10 @@ async function bootHttp({ withSkills = true } = {}) {
     shutdown: async () => {},
   }
   const sessions = new Map()
+  const kbRoot = root
+  const agentsDir = path.join(root, 'agents')
+  const workflowsDir = path.join(root, 'workflows')
+  const memoryDir = path.join(root, 'memory')
   globalThis.__wiring = {
     bus,
     runStore,
@@ -49,8 +53,13 @@ async function bootHttp({ withSkills = true } = {}) {
     bridge,
     sessions,
     kbBus,
+    kbRoot,
     skillsDir,
+    agentsDir,
+    workflowsDir,
+    memoryDir,
     watcher: null,
+    spawnPi: () => { throw new Error('test wiring: spawnPi not stubbed') },
   }
   const net = await import('node:net')
   const port = await new Promise((resolve) => {
@@ -226,7 +235,7 @@ test('real watcher → SSE delivers a kb.changed add event within 200ms of an at
     shutdown: async () => {},
   }
   const watcher = new KbWatcher({
-    skillsDir,
+    skillsDir: root,            // watcher roots at kbRoot in production
     bus: kbBus,
     stabilityThreshold: 100,
     pollInterval: 25,
@@ -236,7 +245,14 @@ test('real watcher → SSE delivers a kb.changed add event within 200ms of an at
   globalThis.__wiring = {
     bus, runStore, tracker, bridge,
     sessions: new Map(),
-    kbBus, skillsDir, watcher,
+    kbBus,
+    kbRoot: root,
+    skillsDir,
+    agentsDir: path.join(root, 'agents'),
+    workflowsDir: path.join(root, 'workflows'),
+    memoryDir: path.join(root, 'memory'),
+    watcher,
+    spawnPi: () => { throw new Error('test wiring: spawnPi not stubbed') },
   }
 
   const net = await import('node:net')

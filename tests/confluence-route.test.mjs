@@ -47,9 +47,16 @@ async function bootHttp({ confluence = new FakeConfluence(), confluenceConfigure
   globalThis.__wiring = {
     bus, runStore, tracker, bridge,
     sessions: new Map(),
-    kbBus, skillsDir, watcher: null,
+    kbBus,
+    kbRoot: root,
+    skillsDir,
+    agentsDir: path.join(root, 'agents'),
+    workflowsDir: path.join(root, 'workflows'),
+    memoryDir: path.join(root, 'memory'),
+    watcher: null,
     confluence: confluenceConfigured ? confluence : null,
     confluenceConfigured,
+    spawnPi: () => { throw new Error('test wiring: spawnPi not stubbed') },
   }
   const net = await import('node:net')
   const port = await new Promise((resolve) => {

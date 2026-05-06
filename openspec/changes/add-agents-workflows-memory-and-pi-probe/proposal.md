@@ -70,3 +70,7 @@ Together these are the prerequisite the hermes-caliber frontend rebuild (Change 
 - Affected code: `src/types/kb.ts`, `src/server/kb-browser.ts`, `src/server/kb-watcher.ts`, `src/server/wiring.ts`, `src/routes/kb.ts`, new `src/server/{agent,workflow,memory}-writer.ts`, new `src/routes/{agents,workflows,memory}.ts`, `src/routes/probe.ts`, `src/server.ts` (route table).
 - New tests under `tests/{agent,workflow,memory}-{writer,route}.test.mjs`, extension of `tests/kb-browser.test.mjs` for the new node kinds, `tests/probe.test.mjs` (new) with a fake `spawnPi`.
 - Risk: medium. `kbRoot` widening could leak diagnostics from non-skill paths into the existing `/api/kb/graph` response. Mitigation: each kind is parsed under its own subdir; unknown subdirs are ignored with a low-severity diagnostic.
+
+## Amendments
+
+**2026-05-06 — chat-controls split out.** The original proposal bundled multi-model chat + tool approval (`extension_ui_request` forwarding, `set_model` RPC, `bridge.cycleModel`) under section 9. That work is real but its consumer is the frontend Settings + composer surfaces, which live in the next change. To keep this change focused on backend data plumbing the frontend rebuild will read from, the `chat-controls` delta spec and section 9 of `tasks.md` have been moved to a follow-up change `add-chat-controls-multi-model`. The seven specs that remain — `kb`, `probe`, `skills`, `agents`, `workflows`, `memory`, `providers` — are all implemented, tested (194 unit tests green, +20 new for the new domains), and ready to archive.

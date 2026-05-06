@@ -12,12 +12,12 @@ export async function handleKbGraph(
   res: ServerResponse,
   w: Wiring,
 ): Promise<void> {
-  if (!w.skillsDir) {
-    jsonError(res, 500, 'NO_SKILLS_DIR', 'workspace has no skills directory configured')
+  if (!w.kbRoot) {
+    jsonError(res, 500, 'NO_KB_ROOT', 'workspace has no kb root configured')
     return
   }
   try {
-    const graph = await buildGraph(w.skillsDir)
+    const graph = await buildGraph(w.kbRoot)
     jsonOk(res, 200, graph)
   } catch (err) {
     jsonError(res, 500, 'GRAPH_BUILD_FAILED', (err as Error).message)
