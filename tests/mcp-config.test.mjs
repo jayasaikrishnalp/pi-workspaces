@@ -95,3 +95,35 @@ test('loadSeedConfig: skips atlassian when no atlassian creds exist', () => {
   const cfg = loadSeedConfig({ PATH: dir, REF_API_KEY: '' }, { getByPrefix: () => ({}) })
   assert.equal(cfg.find((c) => c.id === 'atlassian'), undefined)
 })
+
+test('loadSeedConfig: registers servicenow when SNOW_INSTANCE+USER+PASS all exist', () => {
+  const fakeStore = {
+    getByPrefix: (p) => p === '' ? {
+      SNOW_INSTANCE: 'https://devwolterskluwer.service-now.com',
+      SNOW_USER: 'ADO_Integration_User',
+      SNOW_PASS: '#Aeuicty321',
+    } : {},
+  }
+  const cfg = loadSeedConfig({ REF_API_KEY: '' }, fakeStore)
+  const snow = cfg.find((c) => c.id === 'servicenow')
+  assert.ok(snow, 'servicenow server must be registered when all three SNOW_* secrets exist')
+  assert.equal(snow.kind, 'stdio')
+  assert.match(snow.args[snow.args.length - 1], /extensions\/servicenow-mcp\/server\.ts$/)
+  assert.equal(snow.env.SNOW_INSTANCE, 'https://devwolterskluwer.service-now.com')
+  assert.equal(snow.env.SNOW_USER, 'ADO_Integration_User')
+  assert.equal(snow.env.SNOW_PASS, '#Aeuicty321')
+})
+
+test('loadSeedConfig: skips servicenow when any SNOW_* secret is missing', () => {
+  for (const missing of ['SNOW_INSTANCE', 'SNOW_USER', 'SNOW_PASS']) {
+    const all = {
+      SNOW_INSTANCE: 'https://x.service-now.com',
+      SNOW_USER: 'u',
+      SNOW_PASS: 'p',
+    }
+    delete all[missing]
+    const fakeStore = { getByPrefix: (p) => p === '' ? all : {} }
+    const cfg = loadSeedConfig({ REF_API_KEY: '' }, fakeStore)
+    assert.equal(cfg.find((c) => c.id === 'servicenow'), undefined, `must skip when ${missing} is absent`)
+  }
+})

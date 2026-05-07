@@ -96,6 +96,21 @@ export function loadSeedConfig(
     })
   }
 
+  // ServiceNow MCP. Locally hosted server under extensions/servicenow-mcp,
+  // launched via tsx. Gated on all three SNOW_* secrets being present —
+  // anything less and the broker would just fail with NO_CREDS on every call.
+  const hasSnowCreds = !!(secretEnv.SNOW_INSTANCE && secretEnv.SNOW_USER && secretEnv.SNOW_PASS)
+  if (hasSnowCreds) {
+    const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..')
+    catalog.push({
+      id: 'servicenow',
+      kind: 'stdio',
+      command: process.execPath,
+      args: ['--import', 'tsx', path.join(repoRoot, 'extensions/servicenow-mcp/server.ts')],
+      env: { ...secretEnv },
+    })
+  }
+
   return catalog
 }
 
