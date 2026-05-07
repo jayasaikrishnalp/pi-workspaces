@@ -228,6 +228,7 @@ export type WorkflowStepStatus = 'queued' | 'running' | 'completed' | 'failed' |
 export interface WorkflowRun {
   id: string
   workflow: string
+  workflow_name: string | null
   status: WorkflowRunStatus
   started_at: number
   ended_at: number | null
@@ -239,25 +240,41 @@ export interface WorkflowRun {
 export interface WorkflowStepRun {
   run_id: string
   step_index: number
-  step_kind: 'skill' | 'workflow'
+  step_kind: 'skill' | 'workflow' | 'agent'
   step_ref: string
   status: WorkflowStepStatus
   started_at: number | null
   ended_at: number | null
   output: string | null
   error: string | null
+  // v2 agent-driven columns:
+  step_id: string | null
+  step_agent_id: string | null
+  step_note: string | null
+  step_branches: string | null
+  step_decision: string | null
+  step_next: string | null
+  pi_run_id: string | null
 }
 
-export const listWorkflowRuns = (name: string) =>
-  api.get<{ runs: WorkflowRun[] }>(`/api/workflows/${encodeURIComponent(name)}/runs`)
-export const getWorkflowRun = (name: string, runId: string) =>
-  api.get<{ run: WorkflowRun; steps: WorkflowStepRun[] }>(`/api/workflows/${encodeURIComponent(name)}/runs/${runId}`)
-export const startWorkflowRun = (name: string) =>
-  api.post<{ runId: string }>(`/api/workflows/${encodeURIComponent(name)}/run`, {})
-export const cancelWorkflowRun = (name: string, runId: string) =>
-  api.post<{ ok: boolean }>(`/api/workflows/${encodeURIComponent(name)}/run/${runId}/cancel`, {})
-export const workflowRunEventsUrl = (name: string, runId: string) =>
-  `/api/workflows/${encodeURIComponent(name)}/run/${runId}/events`
+/** Body shape for POST /api/workflow-runs (server.ts).
+ *  Re-exports the client-side Workflow + Agent types defined in
+ *  workflows-store.ts / agents-store.ts. */
+import type { Workflow as WfSchema } from './workflows-store'
+import type { Agent as AgentSchema } from './agents-store'
+
+export const listWorkflowRuns = (workflowId?: string) => {
+  const qs = workflowId ? `?workflowId=${encodeURIComponent(workflowId)}` : ''
+  return api.get<{ runs: WorkflowRun[] }>(`/api/workflow-runs${qs}`)
+}
+export const getWorkflowRun = (runId: string) =>
+  api.get<{ run: WorkflowRun; steps: WorkflowStepRun[] }>(`/api/workflow-runs/${runId}`)
+export const startWorkflowRun = (workflow: WfSchema, agents: AgentSchema[], triggeredBy = 'operator') =>
+  api.post<{ runId: string }>(`/api/workflow-runs`, { workflow, agents, triggeredBy })
+export const cancelWorkflowRun = (runId: string) =>
+  api.post<{ ok: boolean }>(`/api/workflow-runs/${runId}/cancel`, {})
+export const workflowRunEventsUrl = (runId: string) =>
+  `/api/workflow-runs/${runId}/events`
 
 /* ===== Dashboard intelligence ===== */
 

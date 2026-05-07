@@ -1,13 +1,13 @@
 /**
- * useWorkflowRun — owns one workflow's run state in the conductor.
+ * useWorkflowRun — owns one workflow's run state in the canvas.
  *
  * Provides:
- *   - per-step status map (live, driven by SSE events)
- *   - per-step output buffer (live)
+ *   - per-step (stepId-keyed) status + output + decision + next
  *   - the current runId (or null if no run in flight or never run)
  *   - run() / cancel() actions
  *
- * Subscribes to /api/workflows/:name/run/:runId/events when a run is active.
+ * On run(): POST /api/workflow-runs { workflow, agents, triggeredBy }
+ * Subscribes to /api/workflow-runs/:runId/events when a run is active.
  * On run.end, drops the SSE source but keeps state for inspection.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -16,23 +16,39 @@ import {
   cancelWorkflowRun, listWorkflowRuns, startWorkflowRun, workflowRunEventsUrl,
   type WorkflowStepStatus, type WorkflowRunStatus,
 } from '../lib/api'
+import type { Workflow } from '../lib/workflows-store'
+import type { Agent } from '../lib/agents-store'
 
-interface StepState {
-  status: WorkflowStepStatus
+export interface CardState {
+  stepId: string
+  status: WorkflowStepStatus | 'idle'
   output: string
+  decision: string | null
+  next: string | null
   error: string | null
 }
 
-interface RunState {
+export interface RunState {
   runId: string | null
   status: WorkflowRunStatus | 'idle'
-  steps: Record<number, StepState>
+  cards: Record<string, CardState>
+  activeStepId: string | null
   error: string | null
 }
 
-const EMPTY: RunState = { runId: null, status: 'idle', steps: {}, error: null }
+const EMPTY: RunState = { runId: null, status: 'idle', cards: {}, activeStepId: null, error: null }
 
-export function useWorkflowRun(workflow: string | null): {
+function blankCard(stepId: string): CardState {
+  return { stepId, status: 'idle', output: '', decision: null, next: null, error: null }
+}
+
+function seedCards(workflow: Workflow): Record<string, CardState> {
+  const out: Record<string, CardState> = {}
+  for (const s of workflow.steps) out[s.id] = blankCard(s.id)
+  return out
+}
+
+export function useWorkflowRun(workflow: Workflow | null, agents: Agent[]): {
   state: RunState
   run: () => Promise<void>
   cancel: () => Promise<void>
@@ -44,77 +60,110 @@ export function useWorkflowRun(workflow: string | null): {
   const [startError, setStartError] = useState<string | null>(null)
   const sourceRef = useRef<EventSource | null>(null)
 
-  // Reset state when workflow changes; reload most recent run if any.
+  // Reset state when the workflow id changes; reload most recent run if any.
+  const workflowId = workflow?.id ?? null
   useEffect(() => {
     sourceRef.current?.close()
     sourceRef.current = null
-    setState(EMPTY)
-    if (!workflow) return
+    if (!workflow) { setState(EMPTY); return }
+    setState({ ...EMPTY, cards: seedCards(workflow) })
     let cancelled = false
-    listWorkflowRuns(workflow).then((res) => {
+    listWorkflowRuns(workflow.id).then((res) => {
       if (cancelled || res.runs.length === 0) return
       const latest = res.runs[0]!
-      setState({ runId: latest.id, status: latest.status, steps: {}, error: latest.error })
-      // If still running, attach SSE.
-      if (latest.status === 'running' || latest.status === 'queued') attach(workflow, latest.id)
+      setState((s) => ({ ...s, runId: latest.id, status: latest.status, error: latest.error }))
+      if (latest.status === 'running' || latest.status === 'queued') attach(latest.id)
     }).catch(() => { /* ignore */ })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflow])
+  }, [workflowId])
 
-  const attach = useCallback((name: string, runId: string) => {
+  const upsert = useCallback((stepId: string, patch: Partial<CardState>) => {
+    setState((s) => {
+      const cur = s.cards[stepId] ?? blankCard(stepId)
+      return { ...s, cards: { ...s.cards, [stepId]: { ...cur, ...patch } } }
+    })
+  }, [])
+
+  const attach = useCallback((runId: string) => {
     sourceRef.current?.close()
-    const src = new EventSource(workflowRunEventsUrl(name, runId), { withCredentials: true })
+    const src = new EventSource(workflowRunEventsUrl(runId), { withCredentials: true })
     sourceRef.current = src
-    const upsert = (i: number, patch: Partial<StepState>) =>
-      setState((s) => {
-        const cur = s.steps[i] ?? { status: 'queued' as WorkflowStepStatus, output: '', error: null }
-        return { ...s, steps: { ...s.steps, [i]: { ...cur, ...patch } } }
-      })
 
     src.addEventListener('run.start', (ev: MessageEvent) => {
-      const evt = JSON.parse(ev.data) as { stepCount: number }
-      setState((s) => ({ ...s, status: 'running', steps: Object.fromEntries(Array.from({ length: evt.stepCount }, (_, i) => [i, { status: 'queued' as const, output: '', error: null }])) }))
-    })
-    src.addEventListener('step.start', (ev: MessageEvent) => {
-      const evt = JSON.parse(ev.data) as { stepIndex: number }
-      upsert(evt.stepIndex, { status: 'running' })
-    })
-    src.addEventListener('step.output', (ev: MessageEvent) => {
-      const evt = JSON.parse(ev.data) as { stepIndex: number; chunk: string }
+      // Reset all cards to 'queued' at run.start so a re-run starts fresh.
       setState((s) => {
-        const cur = s.steps[evt.stepIndex] ?? { status: 'queued' as const, output: '', error: null }
-        return { ...s, steps: { ...s.steps, [evt.stepIndex]: { ...cur, output: cur.output + evt.chunk } } }
+        const cards: Record<string, CardState> = {}
+        for (const id of Object.keys(s.cards)) {
+          cards[id] = { ...blankCard(id), status: 'queued' }
+        }
+        return { ...s, status: 'running', cards, activeStepId: null, error: null }
+      })
+      void ev
+    })
+
+    src.addEventListener('step.start', (ev: MessageEvent) => {
+      const evt = JSON.parse(ev.data) as { stepId: string; agentId: string }
+      upsert(evt.stepId, { status: 'running' })
+      setState((s) => ({ ...s, activeStepId: evt.stepId }))
+    })
+
+    src.addEventListener('step.output', (ev: MessageEvent) => {
+      const evt = JSON.parse(ev.data) as { stepId: string; chunk: string }
+      setState((s) => {
+        const cur = s.cards[evt.stepId] ?? blankCard(evt.stepId)
+        return { ...s, cards: { ...s.cards, [evt.stepId]: { ...cur, output: cur.output + evt.chunk } } }
       })
     })
+
     src.addEventListener('step.end', (ev: MessageEvent) => {
-      const evt = JSON.parse(ev.data) as { stepIndex: number; status: WorkflowStepStatus; error?: string }
-      upsert(evt.stepIndex, { status: evt.status, error: evt.error ?? null })
+      const evt = JSON.parse(ev.data) as {
+        stepId: string
+        status: WorkflowStepStatus
+        decision: string | null
+        next: string | null
+        output: string | null
+        error?: string
+      }
+      upsert(evt.stepId, {
+        status: evt.status,
+        decision: evt.decision,
+        next: evt.next,
+        error: evt.error ?? null,
+        // step.end carries the canonical output; prefer it over our streamed
+        // approximation so we don't show partial output if step.output events
+        // got coalesced.
+        ...(evt.output != null ? { output: evt.output } : {}),
+      })
     })
+
     src.addEventListener('run.end', (ev: MessageEvent) => {
       const evt = JSON.parse(ev.data) as { status: WorkflowRunStatus; error?: string }
-      setState((s) => ({ ...s, status: evt.status, error: evt.error ?? null }))
+      setState((s) => ({ ...s, status: evt.status, activeStepId: null, error: evt.error ?? null }))
       src.close(); sourceRef.current = null
     })
-    src.onerror = () => { /* browser will retry; nothing to do */ }
-  }, [])
+
+    src.onerror = () => { /* browser will retry */ }
+  }, [upsert])
 
   const run = useCallback(async () => {
     if (!workflow) return
     setStarting(true); setStartError(null)
     try {
-      const res = await startWorkflowRun(workflow)
-      setState({ runId: res.runId, status: 'queued', steps: {}, error: null })
-      attach(workflow, res.runId)
+      const usedIds = new Set(workflow.steps.map((s) => s.agentId))
+      const usedAgents = agents.filter((a) => usedIds.has(a.id))
+      const res = await startWorkflowRun(workflow, usedAgents)
+      setState((s) => ({ ...s, runId: res.runId, status: 'queued', error: null }))
+      attach(res.runId)
     } catch (err) {
       setStartError((err as Error).message)
     } finally { setStarting(false) }
-  }, [workflow, attach])
+  }, [workflow, agents, attach])
 
   const cancel = useCallback(async () => {
-    if (!workflow || !state.runId) return
-    try { await cancelWorkflowRun(workflow, state.runId) } catch { /* ignore */ }
-  }, [workflow, state.runId])
+    if (!state.runId) return
+    try { await cancelWorkflowRun(state.runId) } catch { /* ignore */ }
+  }, [state.runId])
 
   useEffect(() => () => { sourceRef.current?.close() }, [])
 
