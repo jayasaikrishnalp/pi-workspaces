@@ -54,6 +54,12 @@ interface Props {
   onOpenStep: (stepId: string) => void
   /** Selected step id (if any). */
   selectedStepId: string | null
+  /** Current values for workflow.inputs — keyed by input field name.
+   *  Owned by WorkflowsScreen so the canvas and the start-prompt panel
+   *  stay in sync. */
+  inputValues?: Record<string, string>
+  /** Called when the user types into the inline editor on the START node. */
+  onInputChange?: (name: string, value: string) => void
 }
 
 type StartNodeData = {
@@ -62,6 +68,8 @@ type StartNodeData = {
   status: RunState['status']
   onAddNext: (anchor: HTMLElement | null) => void
   isLast: boolean
+  values: Record<string, string>
+  onValueChange?: (name: string, value: string) => void
 }
 type EndNodeData = {
   kind: 'workflowOutput'
@@ -93,7 +101,7 @@ function iconFor(name: string) {
 /* ===== Node renderers ===== */
 
 function StartNode({ data }: NodeProps<RFNode<StartNodeData, 'workflowInput'>>): JSX.Element {
-  const { inputs, status, onAddNext, isLast } = data
+  const { inputs, status, onAddNext, isLast, values, onValueChange } = data
   const running = status === 'running'
   const done = status === 'completed'
   return (
@@ -108,13 +116,40 @@ function StartNode({ data }: NodeProps<RFNode<StartNodeData, 'workflowInput'>>):
         </div>
       </div>
       {inputs.length > 0 ? (
-        <div className="fc-fields">
-          {inputs.map((f) => (
-            <div key={f.name} className="fc-field" title={f.desc ?? ''}>
-              <span className="fc-field-name">{f.name}{f.required ? <span className="fc-required">*</span> : null}</span>
-              <span className="fc-field-type">{f.type}</span>
-            </div>
-          ))}
+        <div className="fc-fields fc-fields--editable">
+          {inputs.map((f) => {
+            const isLong = f.type === 'text' || f.type === 'markdown'
+            const v = values[f.name] ?? ''
+            return (
+              <div key={f.name} className="fc-field fc-field--editor" title={f.desc ?? ''}>
+                <div className="fc-field-row">
+                  <span className="fc-field-name">{f.name}{f.required ? <span className="fc-required">*</span> : null}</span>
+                  <span className="fc-field-type">{f.type}</span>
+                </div>
+                {isLong ? (
+                  <textarea
+                    className="fc-field-input fc-field-textarea nodrag"
+                    rows={4}
+                    value={v}
+                    placeholder={f.desc ?? `Enter ${f.name}…`}
+                    onChange={(e) => onValueChange?.(f.name, e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <input
+                    className="fc-field-input nodrag"
+                    type="text"
+                    value={v}
+                    placeholder={f.desc ?? `Enter ${f.name}…`}
+                    onChange={(e) => onValueChange?.(f.name, e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
+                )}
+              </div>
+            )
+          })}
         </div>
       ) : (
         <div className="fc-fields fc-fields--empty">no external inputs declared</div>
@@ -316,6 +351,8 @@ function buildElements(
   selectedStepId: string | null,
   onOpenStep: (id: string) => void,
   onAddNext: (predecessorId: string, anchor: HTMLElement | null) => void,
+  inputValues: Record<string, string>,
+  onInputChange?: (name: string, value: string) => void,
 ): { nodes: FlowNode[]; edges: RFEdge[] } {
   const agentMap = new Map(agents.map((a) => [a.id, a]))
   const positions = seededPositions(workflow)
@@ -332,6 +369,8 @@ function buildElements(
       status: runState.status,
       onAddNext: (anchor) => onAddNext('__start__', anchor),
       isLast: workflow.steps.length === 0,
+      values: inputValues,
+      onValueChange: onInputChange,
     },
     draggable: true,
   } as FlowNode)
@@ -503,6 +542,7 @@ function AddPopover({
 
 function InnerCanvas({
   workflow, agents, runState, onWorkflowChange, onOpenStep, selectedStepId,
+  inputValues, onInputChange,
 }: Props): JSX.Element {
   const rf = useReactFlow()
   const [popover, setPopover] = useState<AddPopoverState | null>(null)
@@ -513,9 +553,10 @@ function InnerCanvas({
     setPopover({ predecessorId, anchorRect: anchor.getBoundingClientRect() })
   }, [])
 
+  const safeValues = inputValues ?? {}
   const { nodes, edges } = useMemo(
-    () => buildElements(workflow, agents, runState, selectedStepId, onOpenStep, onAddNext),
-    [workflow, agents, runState, selectedStepId, onOpenStep, onAddNext],
+    () => buildElements(workflow, agents, runState, selectedStepId, onOpenStep, onAddNext, safeValues, onInputChange),
+    [workflow, agents, runState, selectedStepId, onOpenStep, onAddNext, safeValues, onInputChange],
   )
 
   // Mutable copy so React Flow can drag without going through the store on every frame.

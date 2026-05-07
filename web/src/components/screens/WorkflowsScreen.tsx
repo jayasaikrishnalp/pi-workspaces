@@ -463,6 +463,11 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
                   })}
                   onOpenStep={(id) => setOpenStepId(id === openStepId ? null : id)}
                   selectedStepId={openStepId}
+                  inputValues={inputDrafts[active.id] ?? {}}
+                  onInputChange={(name, value) => {
+                    const next = { ...(inputDrafts[active.id] ?? {}), [name]: value }
+                    setInputDrafts((d) => ({ ...d, [active.id]: next }))
+                  }}
                 />
               </div>
             )}

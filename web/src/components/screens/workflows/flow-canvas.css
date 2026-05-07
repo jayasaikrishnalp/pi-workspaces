@@ -299,6 +299,41 @@
 .fc-field--out .fc-field-name { order: 2; }
 .fc-field--out .fc-field-type { order: 1; margin-right: auto; }
 
+/* ----- Editable inputs on the START node ----- */
+.fc-fields--editable { padding: 8px 14px 12px; gap: 10px; display: flex; flex-direction: column; }
+.fc-field--editor { display: flex; flex-direction: column; gap: 4px; padding: 0; }
+.fc-field--editor .fc-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fc-field--editor .fc-field-type { margin-left: auto; }
+.fc-field-input {
+  width: 100%;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 5px;
+  padding: 5px 8px;
+  color: rgba(255,255,255,0.92);
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 11.5px;
+  line-height: 1.45;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 120ms, background 120ms;
+}
+.fc-field-input::placeholder { color: rgba(255,255,255,0.32); }
+.fc-field-input:focus {
+  border-color: var(--accent, #1dacfe);
+  background: rgba(29,172,254,0.06);
+}
+.fc-field-textarea {
+  resize: vertical;
+  min-height: 64px;
+  font-size: 11.5px;
+  white-space: pre-wrap;
+}
+
 .fc-pin-dot {
   width: 8px;
   height: 8px;
@@ -350,6 +385,8 @@
 }
 
 /* ===== START / END nuances ===== */
+/* START node is wider — it hosts the live input editors. */
+.fc-node-start { min-width: 320px; max-width: 320px; }
 .fc-node-start {
   border-left: 3px solid var(--accent, #1dacfe);
 }
