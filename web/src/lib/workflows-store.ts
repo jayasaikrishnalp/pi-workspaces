@@ -118,13 +118,25 @@ export const DEFAULT_WORKFLOWS: Workflow[] = [
         next: 'end',
       },
     ],
+    // Without bindings, the runtime can't wire the workflow input field
+    // into the agent step's input pin — the agent receives no ritm_number
+    // and refuses with "missing required input". This binding is what
+    // makes the user-typed RITM number reach the L1 Triage Agent prompt.
+    bindings: [
+      { to: 'triage.ritm_number', from: { kind: 'workflow', field: 'ritm_number' } },
+      { to: 'out.parsed_ritm',    from: { kind: 'step', stepId: 'triage', field: 'parsed_ritm' } },
+      { to: 'out.summary',        from: { kind: 'step', stepId: 'triage', field: 'summary' } },
+    ],
   },
 ]
 
-// v7 wipes prior workflow set; ships a single minimal L1 Triage Agent
+// v8 adds the missing workflow→step binding for ritm_number (v7 shipped
+// the workflow without bindings, so the agent never received the typed
+// input and refused with "missing required input"). v7 wipes prior set
+// and ships a single minimal L1 Triage Agent
 // workflow that reads a RITM via mcp__servicenow__get_ritm. Bumped from
 // v6 so existing users get the reset without manually clearing localStorage.
-const STORAGE_KEY = 'hive.workflows.v7'
+const STORAGE_KEY = 'hive.workflows.v8'
 
 export function loadWorkflows(): Workflow[] {
   try {
