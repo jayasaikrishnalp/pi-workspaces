@@ -1,0 +1,17 @@
+{
+  "name": "@cloudops/servicenow-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ServiceNow MCP stdio server. Reads SNOW_INSTANCE/SNOW_USER/SNOW_PASS from process.env on every call. Bridged to pi via mcp-bridge.",
+  "bin": {
+    "servicenow-mcp": "./server.ts"
+  },
+  "scripts": {
+    "start": "node --import tsx ./server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "*",
+    "tsx": "*"
+  }
+}
