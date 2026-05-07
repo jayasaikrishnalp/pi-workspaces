@@ -281,7 +281,7 @@ function CreateJobModal({ onClose, onCreate }: CreateJobModalProps): JSX.Element
         <header className="jobs-modal-head">
           <div>
             <h3 className="jobs-modal-title">Create Job</h3>
-            <div className="jobs-modal-sub">Build a scheduled Hermes task with preset timing options.</div>
+            <div className="jobs-modal-sub">Build a scheduled Hive task with preset timing options.</div>
           </div>
           <button type="button" className="jobs-modal-close" onClick={onClose} aria-label="Close">×</button>
         </header>
@@ -364,7 +364,7 @@ function CreateJobModal({ onClose, onCreate }: CreateJobModalProps): JSX.Element
               id="job-prompt"
               className="jobs-modal-textarea"
               rows={5}
-              placeholder="What should Hermes Agent do?"
+              placeholder="What should Hive do?"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               data-testid="job-create-prompt"

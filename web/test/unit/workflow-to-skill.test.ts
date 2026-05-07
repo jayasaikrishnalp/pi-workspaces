@@ -8,7 +8,7 @@ import { DEFAULT_AGENT_ROSTER } from '../../src/lib/agents-store'
 
 describe('workflowSkillName', () => {
   it("strips 'wf-' prefix and produces a kebab-case skill name", () => {
-    expect(workflowSkillName({ id: 'wf-cloudops-dashboard' } as never)).toBe('cloudops-dashboard')
+    expect(workflowSkillName({ id: 'wf-l1-ritm-fetch' } as never)).toBe('l1-ritm-fetch')
     expect(workflowSkillName({ id: 'wf-server-deletion' } as never)).toBe('server-deletion')
   })
   it('lowercases and replaces invalid chars', () => {
@@ -27,16 +27,16 @@ describe('workflowSkillName', () => {
 
 describe('workflowSkillDescription', () => {
   it('mentions the workflow name and inputs', () => {
-    const wf = DEFAULT_WORKFLOWS.find((w) => w.id === 'wf-cloudops-dashboard')!
+    const wf = DEFAULT_WORKFLOWS.find((w) => w.id === 'wf-l1-ritm-fetch')!
     const desc = workflowSkillDescription(wf)
-    expect(desc).toMatch(/Build cloudops-dashboard/)
-    expect(desc).toMatch(/ticket_key/)
+    expect(desc).toMatch(/L1 Triage/)
+    expect(desc).toMatch(/ritm_number/)
   })
 })
 
 describe('workflowToSkillMd', () => {
   it('produces a SKILL.md body with Inputs / Outputs / Agents / YAML sections', () => {
-    const wf = DEFAULT_WORKFLOWS.find((w) => w.id === 'wf-cloudops-dashboard')!
+    const wf = DEFAULT_WORKFLOWS.find((w) => w.id === 'wf-l1-ritm-fetch')!
     const md = workflowToSkillMd(wf, DEFAULT_AGENT_ROSTER)
     expect(md).toContain('## Inputs (workflow contract)')
     expect(md).toContain('## Outputs')
@@ -44,9 +44,9 @@ describe('workflowToSkillMd', () => {
     expect(md).toContain('## How to invoke')
     expect(md).toContain('## Embedded workflow definition (hive.workflow/v1 YAML)')
     // Lists the typed input
-    expect(md).toMatch(/- \*\*ticket_key\*\* \(`string`\)/)
+    expect(md).toMatch(/- \*\*ritm_number\*\* \(`string`\)/)
     // Lists at least one declared output
-    expect(md).toMatch(/- \*\*preview_url\*\* \(`url`\)/)
+    expect(md).toMatch(/- \*\*summary\*\* \(`markdown`\)/)
     // Embeds the YAML — should round-trip back to the workflow
     const yamlBlock = md.split('```yaml')[1]?.split('```')[0]?.trim()
     expect(yamlBlock).toBeTruthy()
