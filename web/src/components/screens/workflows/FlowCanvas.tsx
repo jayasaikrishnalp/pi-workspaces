@@ -631,7 +631,7 @@ function InnerCanvas({
             return agent ? AGENT_KIND_META[agent.kind].color : '#666'
           }}
           maskColor="rgba(12,13,16,0.7)"
-          style={{ background: 'rgba(20,22,28,0.8)' }}
+          style={{ background: 'rgba(20,22,28,0.8)', width: 160, height: 100 }}
         />
       </ReactFlow>
       {popover ? (
