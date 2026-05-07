@@ -59,3 +59,39 @@ test('loadSeedConfig: ref entry omits headers when no key resolvable', () => {
     assert.ok(typeof ref.headers['x-ref-api-key'] === 'string')
   }
 })
+
+test('loadSeedConfig: registers atlassian when uvx is on PATH AND atlassian creds exist', () => {
+  // Stub uvx by creating a tmp dir + an empty 'uvx' file and pointing PATH at it.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'uvx-'))
+  fs.writeFileSync(path.join(dir, 'uvx'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+  const fakeStore = {
+    getByPrefix: (prefix) => {
+      // Return CONFLUENCE_URL via flat-key passthrough so the atlassian guard
+      // (hasAtlassianCreds) lights up.
+      if (prefix === '') return { CONFLUENCE_URL: 'https://example.atlassian.net' }
+      return {}
+    },
+  }
+  const cfg = loadSeedConfig({ PATH: dir, REF_API_KEY: '' }, fakeStore)
+  const atl = cfg.find((c) => c.id === 'atlassian')
+  assert.ok(atl, 'atlassian server must be registered')
+  assert.equal(atl.kind, 'stdio')
+  assert.equal(atl.args[0], 'mcp-atlassian')
+  assert.ok(atl.command.endsWith('/uvx'))
+  assert.equal(atl.env.CONFLUENCE_URL, 'https://example.atlassian.net')
+})
+
+test('loadSeedConfig: skips atlassian when uvx is not on PATH', () => {
+  const fakeStore = {
+    getByPrefix: (p) => p === '' ? { CONFLUENCE_URL: 'https://x.atlassian.net' } : {},
+  }
+  const cfg = loadSeedConfig({ PATH: '/nonexistent/path', REF_API_KEY: '' }, fakeStore)
+  assert.equal(cfg.find((c) => c.id === 'atlassian'), undefined)
+})
+
+test('loadSeedConfig: skips atlassian when no atlassian creds exist', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'uvx-'))
+  fs.writeFileSync(path.join(dir, 'uvx'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+  const cfg = loadSeedConfig({ PATH: dir, REF_API_KEY: '' }, { getByPrefix: () => ({}) })
+  assert.equal(cfg.find((c) => c.id === 'atlassian'), undefined)
+})

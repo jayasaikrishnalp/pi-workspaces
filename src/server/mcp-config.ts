@@ -40,6 +40,20 @@ export function resolveRefApiKey(env: NodeJS.ProcessEnv = process.env, claudeJso
  * pick them up automatically through the existing process.env spread merge
  * in StdioMcpClient.
  */
+/** Locate `uvx` (the binary that runs `uvx mcp-atlassian`) without
+ *  hard-coding /opt/homebrew. Resolves via $PATH; returns null when not
+ *  found so callers can skip registering atlassian. */
+function findUvx(env: NodeJS.ProcessEnv): string | null {
+  const fromEnv = env.UVX_BIN
+  if (fromEnv && fs.existsSync(fromEnv)) return fromEnv
+  const dirs = (env.PATH ?? '').split(':')
+  for (const d of dirs) {
+    const candidate = path.join(d, 'uvx')
+    try { if (fs.statSync(candidate).isFile()) return candidate } catch { /* skip */ }
+  }
+  return null
+}
+
 export function loadSeedConfig(
   env: NodeJS.ProcessEnv = process.env,
   secretStore?: SecretReader | null,
@@ -61,6 +75,27 @@ export function loadSeedConfig(
       env: { ...secretEnv },
     },
   ]
+
+  // Atlassian (Jira + Confluence) MCP server. Only registered when:
+  //   - uvx is installed (PATH search or UVX_BIN env)
+  //   - The secret store has at least one of (CONFLUENCE_URL || JIRA_URL)
+  //     so the broker doesn't try to start a server with no creds.
+  // The mcp-atlassian package reads CONFLUENCE_URL / CONFLUENCE_USERNAME /
+  // CONFLUENCE_API_TOKEN / JIRA_URL / JIRA_USERNAME / JIRA_API_TOKEN from
+  // env, all of which the secret store passes through verbatim now that
+  // flat-key passthrough is in place.
+  const uvx = findUvx(env)
+  const hasAtlassianCreds = !!(secretEnv.CONFLUENCE_URL || secretEnv.JIRA_URL)
+  if (uvx && hasAtlassianCreds) {
+    catalog.push({
+      id: 'atlassian',
+      kind: 'stdio',
+      command: uvx,
+      args: ['mcp-atlassian'],
+      env: { ...secretEnv },
+    })
+  }
+
   return catalog
 }
 
