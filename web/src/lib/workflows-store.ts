@@ -272,6 +272,78 @@ export const DEFAULT_WORKFLOWS: Workflow[] = [
       { to: 'out.summary',     from: { kind: 'step', stepId: 'summary',      field: 'summary' } },
     ],
   },
+  {
+    id: 'wf-hackathon-demo',
+    name: 'Hackathon Demo: ServiceNow → AWS Provisioning',
+    task:
+      `End-to-end demo. Given a ServiceNow incident number, L1 Triage reads ` +
+      `the incident via mcp__servicenow__get_incident, parses the embedded ` +
+      `mandatory fields (cloud, account, region, instance_type, ami, subnet, ` +
+      `etc.) from the description, and hands them to AWS Agent. AWS Agent ` +
+      `assumes WKFedRoles-Operations into the target WK account using the ` +
+      `connecting-to-wk-aws skill (which now ALWAYS unsets AWS_SESSION_TOKEN ` +
+      `first), launches the t3.small EC2, tags it with the inc number + owner, ` +
+      `and returns instance_id + ip + launch_time. ServiceNow Agent posts a ` +
+      `work_notes with the result; on success it resolves the incident with ` +
+      `close_code 'Solved (Permanently)', on AWS failure it posts the error ` +
+      `as work_notes and leaves the incident in progress. L1 Triage emits a ` +
+      `final markdown summary of the whole interaction.`,
+    createdAt: '2026-05-07T15:30:00Z',
+    inputs: [
+      { name: 'inc_number', type: 'string', required: true, desc: 'ServiceNow incident number, e.g. INC3524652' },
+    ],
+    outputs: [
+      { name: 'status',      type: 'enum<provisioned|failed>', desc: 'Whether the AWS resource was created' },
+      { name: 'instance_id', type: 'string',                   desc: 'EC2 instance id (success only)' },
+      { name: 'summary',     type: 'markdown',                 desc: 'Final markdown summary of the run' },
+    ],
+    steps: [
+      {
+        id: 'triage',
+        agentId: 'l1-triage-agent',
+        note:
+          'Read the incident with mcp__servicenow__get_incident. Parse the ' +
+          'mandatory fields from .description (cloud, account, region, ' +
+          'instance_type, ami, subnet, env, owner). Emit a structured handoff ' +
+          'for AWS Agent with all fields needed to provision.',
+      },
+      {
+        id: 'provision',
+        agentId: 'aws-agent',
+        note:
+          'Use the connecting-to-wk-aws skill — source the helper or follow ' +
+          'Steps 0.4 → 0.5 → 1 → 2 in one Bash call. Unset AWS_SESSION_TOKEN ' +
+          'FIRST. Assume WKFedRoles-Operations into the target account from ' +
+          'triage. Launch one t3.small with the requested ami in the requested ' +
+          'subnet, tag {Name: hive-hackathon-<inc>, env: dev, owner: <owner>, ' +
+          'inc: <inc>}. Wait for state=running. Return instance_id, public_ip ' +
+          '(or private_ip if no EIP), launch_time. On any failure, return ' +
+          'status=failed plus the error message — DO NOT raise; pass it on.',
+      },
+      {
+        id: 'snow-update',
+        agentId: 'servicenow-agent',
+        note:
+          'Post a work_notes on the incident via mcp__servicenow__update_incident. ' +
+          'Body: instance_id + ip + launch_time on success, or the AWS error ' +
+          'on failure. On success, also resolve the incident: ' +
+          'mcp__servicenow__resolve_incident with close_code "Solved ' +
+          '(Permanently)" and close_notes summarising what was provisioned. ' +
+          'On failure, leave the incident in In Progress (state=2).',
+      },
+      {
+        id: 'summary',
+        agentId: 'l1-triage-agent',
+        note:
+          'Mode C — write a markdown summary of the entire interaction for the ' +
+          'demo audience. Sections: 1) what the incident asked for, ' +
+          '2) what was parsed, 3) what AWS provisioned (or why it failed), ' +
+          '4) what ServiceNow was updated with, 5) the final state of the ' +
+          'incident.',
+        next: 'end',
+      },
+    ],
+  },
 ]
 
 // v5 ships the RITM Fulfilment workflow + the ticket_number rename + the
