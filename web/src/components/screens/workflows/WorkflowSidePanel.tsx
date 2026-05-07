@@ -11,6 +11,8 @@
  * Default tab is `Logs` when there's run data, `Details` otherwise.
  */
 import { useEffect, useMemo, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 import { Icons } from '../../icons/Icons'
 import { AGENT_KIND_META, type Agent } from '../../../lib/agents-store'
@@ -236,7 +238,11 @@ export function WorkflowSidePanel({
         ) : (
           <section>
             {cardState?.output ? (
-              <pre className="fc-sidepanel-output">{cardState.output}</pre>
+              <div className="fc-sidepanel-output-md">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {cardState.output}
+                </ReactMarkdown>
+              </div>
             ) : (
               <div className="fc-sidepanel-logs-empty">
                 No output yet — the step hasn't produced a final response.
