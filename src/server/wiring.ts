@@ -262,7 +262,6 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     workflowRunner = new WorkflowRunner({
       store: workflowRunsStore,
       bus: workflowRunBuses,
-      kbRoot,
     })
   }
 

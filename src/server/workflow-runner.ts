@@ -1,179 +1,263 @@
 /**
- * WorkflowRunner — sequential v1 executor.
+ * WorkflowRunner v2 — agent-driven, branching pipelines.
  *
- * Walks `steps[]`. For each step:
+ * Every step references an Agent (from the client roster). For each step:
  *   1. Mark step running, emit `step.start`.
- *   2. Resolve the step (load skill body or recurse for sub-workflow).
- *   3. Drive the configured `StepExecutor` to "run" the step.
- *      Default executor is `SimulatedStepExecutor` — produces realistic
- *      lifecycle events without touching pi. The real pi-bridge executor
- *      arrives in a later spec; until then chat and workflows stay decoupled.
- *   4. Mark step completed/failed, persist output, emit `step.end`.
+ *   2. Compose the prompt = agent.prompt + workflow context + previous-step
+ *      output + (optional) decision-token trailer when the step has branches.
+ *   3. Drive the configured `AgentStepExecutor` to run the prompt. The default
+ *      executor (`SimulatedAgentExecutor`) emits a deterministic stub output
+ *      so tests can drive the runner without spawning pi. Commit 3 wires up
+ *      the `PiBridgeStepExecutor`.
+ *   4. Parse a DECISION token from the output if the step has branches; route
+ *      to branches[decision], else step.next, else the next list element.
+ *   5. Mark step completed/failed, persist output + decision + next, emit
+ *      `step.end`.
  *
  * Failure halts the run. Cancellation is cooperative — the runner checks the
  * cancel flag between steps and emits `run.end status=cancelled`.
  */
 import { randomUUID } from 'node:crypto'
-import path from 'node:path'
-import fs from 'node:fs/promises'
 
 import type { WorkflowRunsStore } from './workflow-runs-store.js'
-import type { WorkflowRunBusRegistry } from './workflow-run-bus.js'
-import { decodeSteps } from './workflow-writer.js'
+import type { WorkflowRunBusRegistry, WorkflowRunBus } from './workflow-run-bus.js'
 
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/
-
-/** Tiny YAML scalar parser — handles `key: value` and `key:` followed by `- item` lists. */
-function parseFrontmatter(raw: string): { frontmatter: Record<string, unknown>; body: string } {
-  const m = FRONTMATTER_RE.exec(raw)
-  if (!m) return { frontmatter: {}, body: raw }
-  const fm: Record<string, unknown> = {}
-  let lastList: string | null = null
-  for (const lineRaw of (m[1] ?? '').split(/\r?\n/)) {
-    const line = lineRaw.trimEnd()
-    if (!line.trim()) { lastList = null; continue }
-    const listItem = /^\s*-\s*(.*)$/.exec(line)
-    if (listItem && lastList) {
-      const arr = (fm[lastList] as string[] | undefined) ?? []
-      arr.push(unquote(listItem[1] ?? ''))
-      fm[lastList] = arr
-      continue
-    }
-    const kv = /^([A-Za-z0-9_-]+)\s*:\s*(.*)$/.exec(line)
-    if (!kv) continue
-    const key = kv[1]!
-    const val = kv[2] ?? ''
-    if (val === '') { fm[key] = []; lastList = key; continue }
-    fm[key] = unquote(val); lastList = null
-  }
-  return { frontmatter: fm, body: (m[2] ?? '') }
-}
-
-function unquote(s: string): string {
-  const t = s.trim()
-  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) return t.slice(1, -1)
-  return t
-}
+/* ===== Public types ===== */
 
 export interface WorkflowStep {
-  kind: 'skill' | 'workflow'
-  ref: string
+  id: string
+  agentId: string
+  note?: string
+  next?: string
+  branches?: Record<string, string>
 }
 
+export interface Workflow {
+  id: string
+  name: string
+  task?: string
+  steps: WorkflowStep[]
+}
+
+export interface AgentDef {
+  id: string
+  name: string
+  kind: string
+  role?: string
+  model: string
+  skills: string[]
+  prompt: string
+}
+
+/** Per-step context the executor receives. */
 export interface StepContext {
-  workflow: string
-  runId: string
-  stepIndex: number
+  workflow: Workflow
+  agent: AgentDef
   step: WorkflowStep
-  /** Resolved skill or sub-workflow body (markdown, frontmatter stripped). */
-  body: string
-  description: string | null
-}
-
-export interface StepExecutor {
-  execute(ctx: StepContext, hooks: ExecutorHooks): Promise<{ status: 'completed' | 'failed'; output?: string; error?: string }>
+  workflowRunId: string
+  stepIndex: number
+  /** Composed prompt (agent.prompt + workflow/task/note + prevOutput + decision trailer). */
+  prompt: string
+  /** True when the step has branches and the executor should emit a DECISION line. */
+  needsDecision: boolean
 }
 
 export interface ExecutorHooks {
-  emitChunk(chunk: string): void
-  shouldCancel(): boolean
+  emitChunk: (chunk: string) => void
+  shouldCancel: () => boolean
 }
 
-/**
- * Default executor for v1 — simulates execution by emitting the skill's title
- * + a few canned progress lines. Honest about what it is: a visualizer driver,
- * not a real agent run. Produces output that's readable in the rail.
- */
-export class SimulatedStepExecutor implements StepExecutor {
-  async execute(ctx: StepContext, hooks: ExecutorHooks) {
-    const lines = [
-      `▸ ${ctx.step.kind}:${ctx.step.ref}`,
-      ctx.description ? `  ${ctx.description}` : '',
-      '',
-      previewBody(ctx.body),
-      '',
-      `✓ ${ctx.step.kind}:${ctx.step.ref} done`,
-    ].filter(Boolean)
-    for (const line of lines) {
-      if (hooks.shouldCancel()) return { status: 'failed' as const, error: 'cancelled' }
-      hooks.emitChunk(line + '\n')
-      await sleep(180 + Math.random() * 220)
-    }
-    return { status: 'completed' as const, output: lines.join('\n') }
-  }
+export interface AgentStepExecutor {
+  execute(ctx: StepContext, hooks: ExecutorHooks): Promise<{
+    status: 'completed' | 'failed' | 'cancelled'
+    output: string
+    error?: string
+    /** Optional bridge run id (if executed via pi) — persisted for traceability. */
+    piRunId?: string
+  }>
 }
 
-function previewBody(body: string): string {
-  const trimmed = body.trim()
-  if (!trimmed) return '(no body)'
-  return trimmed.split('\n').slice(0, 6).join('\n')
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+export interface RunnerStartArgs {
+  workflow: Workflow
+  agents: AgentDef[]
+  triggeredBy?: string
 }
 
 export interface WorkflowRunnerDeps {
   store: WorkflowRunsStore
   bus: WorkflowRunBusRegistry
-  kbRoot: string
-  executor?: StepExecutor
+  /** Executor used when the runner runs each step. Tests inject a simulated one;
+   *  commit 3 swaps in the real pi-bridge executor. */
+  executor?: AgentStepExecutor
 }
+
+/* ===== Decision token parser ===== */
+
+/**
+ * Walk the output backwards line-by-line; return the first DECISION token
+ * we hit. Token format: `DECISION: <token>` on its own line.
+ *   token = [a-z0-9][a-z0-9_-]*  (case-folded to lowercase on return)
+ *
+ * Returns null when no valid DECISION line is present.
+ */
+export function parseDecisionToken(text: string): string | null {
+  if (!text) return null
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = /^DECISION:\s*([a-z0-9][a-z0-9_-]*)\s*$/i.exec(lines[i]!)
+    if (m) return m[1]!.toLowerCase()
+  }
+  return null
+}
+
+/* ===== Routing logic ===== */
+
+/** Pick the next step id given a step, its parsed decision (if any), the full
+ *  steps list, and the current step index. Pure function — no side effects. */
+export function chooseNext(
+  step: WorkflowStep,
+  decision: string | null,
+  steps: WorkflowStep[],
+  index: number,
+): string {
+  // 1. Branches with a matching decision → route there.
+  if (step.branches && decision && step.branches[decision]) {
+    return step.branches[decision]
+  }
+  // 2. Explicit next override.
+  if (step.next) return step.next
+  // 3. Default: next list element, else 'end'.
+  return steps[index + 1]?.id ?? 'end'
+}
+
+/* ===== Prompt composer ===== */
+
+const PREV_OUTPUT_TAIL_BYTES = 4096
+
+export function composePrompt(
+  workflow: Workflow,
+  step: WorkflowStep,
+  agent: AgentDef,
+  prevOutput: string,
+): string {
+  const branchKeys = step.branches ? Object.keys(step.branches) : []
+  const decisionTrailer = branchKeys.length > 0
+    ? `\n\n---\nYou MUST end your response with a single line in this exact format:\n  DECISION: <token>\nwhere <token> is one of: ${branchKeys.join(' | ')}\n\nThe DECISION line is the ONLY way the workflow knows which branch to take. ` +
+      `Place it on its own line, lowercase, no quotes, no extra punctuation.`
+    : ''
+
+  const prevSection = prevOutput.trim()
+    ? `\nPREVIOUS STEP OUTPUT:\n${prevOutput.trim().slice(-PREV_OUTPUT_TAIL_BYTES)}\n`
+    : ''
+
+  return [
+    `You are ${agent.name}.`,
+    '',
+    agent.prompt,
+    '',
+    '---',
+    `WORKFLOW: ${workflow.name}`,
+    workflow.task ? `TASK: ${workflow.task}` : null,
+    `STEP: ${step.id}${step.note ? ` — ${step.note}` : ''}`,
+    prevSection,
+    'Carry out this step now.',
+    decisionTrailer,
+  ].filter((l) => l != null).join('\n')
+}
+
+/* ===== Default executor ===== */
+
+/**
+ * Test-friendly default. Emits the agent's name + step id + (when branches)
+ * a deterministic decision picked from `decisions[stepId]` if provided, else
+ * the first branch key. No timing — completes synchronously for fast tests.
+ */
+export class SimulatedAgentExecutor implements AgentStepExecutor {
+  constructor(private decisions: Record<string, string> = {}) {}
+  async execute(ctx: StepContext, hooks: ExecutorHooks) {
+    if (hooks.shouldCancel()) return { status: 'cancelled' as const, output: '' }
+    const intro = `[${ctx.agent.name}] running step ${ctx.step.id}`
+    hooks.emitChunk(intro + '\n')
+    if (hooks.shouldCancel()) return { status: 'cancelled' as const, output: intro + '\n' }
+    let output = intro + '\n'
+    if (ctx.needsDecision) {
+      const branchKeys = Object.keys(ctx.step.branches!)
+      const decision = this.decisions[ctx.step.id] ?? branchKeys[0]!
+      const line = `DECISION: ${decision}`
+      hooks.emitChunk(line + '\n')
+      output += line + '\n'
+    }
+    return { status: 'completed' as const, output }
+  }
+}
+
+/* ===== Runner ===== */
+
+const MAX_STEPS = 64
 
 export class WorkflowRunner {
   private cancelFlags = new Map<string, boolean>()
-  private executor: StepExecutor
+  private executor: AgentStepExecutor
 
   constructor(private deps: WorkflowRunnerDeps) {
-    this.executor = deps.executor ?? new SimulatedStepExecutor()
+    this.executor = deps.executor ?? new SimulatedAgentExecutor()
   }
 
-  /** Loads a workflow's frontmatter and decodes its steps. */
-  async loadSteps(workflow: string): Promise<WorkflowStep[]> {
-    const file = path.join(this.deps.kbRoot, 'workflows', workflow, 'WORKFLOW.md')
-    const raw = await fs.readFile(file, 'utf8')
-    const { frontmatter } = parseFrontmatter(raw)
-    return decodeSteps((frontmatter as { steps?: unknown }).steps)
+  /** Replace the step executor (commit 3 wires this for the pi-bridge variant). */
+  setExecutor(executor: AgentStepExecutor): void {
+    this.executor = executor
   }
 
-  /** Loads body + description for a single step (skill or sub-workflow). */
-  private async loadStepResource(step: WorkflowStep): Promise<{ body: string; description: string | null }> {
-    const subdir = step.kind === 'skill' ? 'skills' : 'workflows'
-    const filename = step.kind === 'skill' ? 'SKILL.md' : 'WORKFLOW.md'
-    const file = path.join(this.deps.kbRoot, subdir, step.ref, filename)
-    try {
-      const raw = await fs.readFile(file, 'utf8')
-      const { frontmatter, body } = parseFrontmatter(raw)
-      const desc = (frontmatter as { description?: unknown }).description
-      return { body, description: typeof desc === 'string' ? desc : null }
-    } catch {
-      return { body: `(missing: ${step.kind}:${step.ref})`, description: null }
+  /** Spawn a new run. Returns the runId; execution proceeds async. */
+  async start(args: RunnerStartArgs): Promise<string> {
+    const { workflow, agents } = args
+    if (!workflow.id) throw new RunnerError('BAD_WORKFLOW', 'workflow.id required')
+    if (!Array.isArray(workflow.steps) || workflow.steps.length === 0) {
+      throw new RunnerError('NO_STEPS', `workflow ${workflow.id} has no steps`)
     }
-  }
+    // Validate every step's agentId resolves in the provided roster.
+    const agentMap = new Map(agents.map((a) => [a.id, a]))
+    const stepIds = new Set(workflow.steps.map((s) => s.id))
+    for (const s of workflow.steps) {
+      if (!agentMap.has(s.agentId)) {
+        throw new RunnerError('MISSING_AGENT', `agent ${s.agentId} not in provided roster`, { agentId: s.agentId })
+      }
+      // Validate next / branches point at known step ids or 'end'.
+      if (s.next && s.next !== 'end' && !stepIds.has(s.next)) {
+        throw new RunnerError('BAD_NEXT', `step ${s.id}.next references unknown step ${s.next}`)
+      }
+      if (s.branches) {
+        for (const [k, v] of Object.entries(s.branches)) {
+          if (v !== 'end' && !stepIds.has(v)) {
+            throw new RunnerError('BAD_BRANCH', `step ${s.id}.branches.${k} references unknown step ${v}`)
+          }
+        }
+      }
+    }
 
-  /** Spawn a new run. Returns the runId immediately; execution proceeds async. */
-  async start(workflow: string, opts: { triggeredBy?: string } = {}): Promise<string> {
-    const steps = await this.loadSteps(workflow)
-    if (steps.length === 0) throw new RunnerError('NO_STEPS', `workflow ${workflow} has no steps`)
-    const active = this.deps.store.activeRun(workflow)
-    if (active) throw new RunnerError('ACTIVE_RUN', `workflow ${workflow} already running (run=${active.id})`, { activeRunId: active.id })
+    const active = this.deps.store.activeRun(workflow.id)
+    if (active) {
+      throw new RunnerError('ACTIVE_RUN', `workflow ${workflow.id} already running (run=${active.id})`, { activeRunId: active.id })
+    }
 
     const runId = randomUUID()
-    // Legacy v1 path: synthesize minimal AgentStepInput shape so the v2 store
-    // accepts our skill/workflow refs. Commit 2 replaces this runner with the
-    // agent-driven version; this is just a transient adapter to keep tsc green.
     this.deps.store.createRun({
-      id: runId, workflow, workflowName: workflow,
-      triggeredBy: opts.triggeredBy ?? null,
-      steps: steps.map((s, i) => ({ id: `step-${i + 1}`, agentId: `${s.kind}:${s.ref}` })),
+      id: runId,
+      workflow: workflow.id,
+      workflowName: workflow.name,
+      triggeredBy: args.triggeredBy ?? null,
+      steps: workflow.steps.map((s) => ({
+        id: s.id, agentId: s.agentId, note: s.note,
+        branches: s.branches, next: s.next,
+      })),
     })
     const bus = this.deps.bus.getOrCreate(runId)
 
-    // Kick off execution; never await — the route returns immediately.
-    void this.execute(runId, workflow, steps, bus).catch((err) => {
+    void this.execute(runId, workflow, agentMap, bus).catch((err) => {
       console.error(`[workflow-runner] run ${runId} crashed:`, err)
-      this.deps.store.setRunStatus(runId, 'failed', { error: (err as Error).message })
-      bus.emit({ kind: 'run.end', runId, status: 'failed', error: (err as Error).message, ts: Date.now() })
+      const msg = (err as Error).message
+      this.deps.store.setRunStatus(runId, 'failed', { error: msg })
+      bus.emit({ kind: 'run.end', runId, status: 'failed', error: msg, ts: Date.now() })
       this.deps.bus.markClosed(runId)
     })
     return runId
@@ -183,49 +267,148 @@ export class WorkflowRunner {
     this.cancelFlags.set(runId, true)
   }
 
-  private async execute(runId: string, workflow: string, steps: WorkflowStep[], bus: ReturnType<WorkflowRunBusRegistry['getOrCreate']>): Promise<void> {
+  private async execute(
+    runId: string,
+    workflow: Workflow,
+    agentMap: Map<string, AgentDef>,
+    bus: WorkflowRunBus,
+  ): Promise<void> {
     this.deps.store.setRunStatus(runId, 'running')
-    bus.emit({ kind: 'run.start', runId, workflow, stepCount: steps.length, ts: Date.now() })
+    bus.emit({
+      kind: 'run.start',
+      runId, workflowId: workflow.id, name: workflow.name,
+      stepCount: workflow.steps.length, ts: Date.now(),
+    })
 
+    const stepById = new Map(workflow.steps.map((s) => [s.id, s]))
+    const indexById = new Map(workflow.steps.map((s, i) => [s.id, i]))
+    let cursorId: string = workflow.steps[0]!.id
+    let visited = 0
     let stepDone = 0
-    for (let i = 0; i < steps.length; i++) {
+    let prevOutput = ''
+
+    while (cursorId !== 'end') {
+      if (visited >= MAX_STEPS) {
+        this.deps.store.setRunStatus(runId, 'failed', { error: 'MAX_STEPS exceeded' })
+        bus.emit({ kind: 'run.end', runId, status: 'failed', error: 'MAX_STEPS exceeded', ts: Date.now() })
+        this.deps.bus.markClosed(runId)
+        return
+      }
+      visited++
+
       if (this.cancelFlags.get(runId)) {
         this.deps.store.setRunStatus(runId, 'cancelled', { stepDone })
         bus.emit({ kind: 'run.end', runId, status: 'cancelled', ts: Date.now() })
         this.deps.bus.markClosed(runId)
+        this.cancelFlags.delete(runId)
         return
       }
-      const step = steps[i]!
-      this.deps.store.startStep(runId, i)
-      bus.emit({ kind: 'step.start', runId, stepIndex: i, ts: Date.now() })
-      const resource = await this.loadStepResource(step)
-      const ctx: StepContext = { workflow, runId, stepIndex: i, step, body: resource.body, description: resource.description }
 
+      const step = stepById.get(cursorId)
+      const stepIndex = indexById.get(cursorId)!
+      if (!step) {
+        const err = `unknown step id: ${cursorId}`
+        this.deps.store.setRunStatus(runId, 'failed', { error: err, stepDone })
+        bus.emit({ kind: 'run.end', runId, status: 'failed', error: err, ts: Date.now() })
+        this.deps.bus.markClosed(runId)
+        return
+      }
+      const agent = agentMap.get(step.agentId)
+      if (!agent) {
+        const err = `agent ${step.agentId} not in roster`
+        this.deps.store.startStep(runId, stepIndex)
+        this.deps.store.finishStep(runId, stepIndex, { status: 'failed', error: err })
+        bus.emit({
+          kind: 'step.end', runId, stepIndex, stepId: step.id, agentId: step.agentId,
+          status: 'failed', decision: null, next: null, output: null, error: err, ts: Date.now(),
+        })
+        this.deps.store.setRunStatus(runId, 'failed', { error: err, stepDone })
+        bus.emit({ kind: 'run.end', runId, status: 'failed', error: err, ts: Date.now() })
+        this.deps.bus.markClosed(runId)
+        return
+      }
+
+      this.deps.store.startStep(runId, stepIndex)
+      bus.emit({
+        kind: 'step.start',
+        runId, stepIndex, stepId: step.id, agentId: agent.id, ts: Date.now(),
+      })
+
+      const prompt = composePrompt(workflow, step, agent, prevOutput)
+      const ctx: StepContext = {
+        workflow, agent, step,
+        workflowRunId: runId, stepIndex,
+        prompt,
+        needsDecision: !!step.branches && Object.keys(step.branches).length > 0,
+      }
+      const collected: string[] = []
       const result = await this.executor.execute(ctx, {
         emitChunk: (chunk) => {
-          this.deps.store.appendStepOutput(runId, i, chunk)
-          bus.emit({ kind: 'step.output', runId, stepIndex: i, chunk, ts: Date.now() })
+          collected.push(chunk)
+          this.deps.store.appendStepOutput(runId, stepIndex, chunk)
+          bus.emit({
+            kind: 'step.output',
+            runId, stepIndex, stepId: step.id, chunk, ts: Date.now(),
+          })
         },
         shouldCancel: () => this.cancelFlags.get(runId) === true,
-      }).catch((err) => ({ status: 'failed' as const, error: (err as Error).message }))
+      }).catch((err) => ({
+        status: 'failed' as const,
+        output: collected.join(''),
+        error: (err as Error).message,
+      }))
 
-      if (result.status === 'failed') {
-        // If cancellation was requested mid-step, finalize as cancelled, not failed.
-        const cancelled = this.cancelFlags.get(runId) === true
-        const stepStatus = cancelled ? 'skipped' : 'failed'
-        this.deps.store.finishStep(runId, i, { status: stepStatus, error: result.error })
-        bus.emit({ kind: 'step.end', runId, stepIndex: i, status: stepStatus, error: result.error, ts: Date.now() })
-        const runStatus = cancelled ? 'cancelled' : 'failed'
-        this.deps.store.setRunStatus(runId, runStatus, { error: cancelled ? null : result.error, stepDone })
-        bus.emit({ kind: 'run.end', runId, status: runStatus, error: cancelled ? undefined : result.error, ts: Date.now() })
+      // Persist piRunId if the executor surfaced one.
+      if ('piRunId' in result && result.piRunId) {
+        this.deps.store.startStep(runId, stepIndex, { piRunId: result.piRunId })
+      }
+
+      if (result.status === 'cancelled') {
+        this.deps.store.finishStep(runId, stepIndex, {
+          status: 'skipped', output: result.output, decision: null, next: null,
+        })
+        bus.emit({
+          kind: 'step.end', runId, stepIndex, stepId: step.id, agentId: agent.id,
+          status: 'skipped', decision: null, next: null, output: result.output, ts: Date.now(),
+        })
+        this.deps.store.setRunStatus(runId, 'cancelled', { stepDone })
+        bus.emit({ kind: 'run.end', runId, status: 'cancelled', ts: Date.now() })
         this.deps.bus.markClosed(runId)
         this.cancelFlags.delete(runId)
         return
       }
-      this.deps.store.finishStep(runId, i, { status: 'completed', output: result.output })
-      bus.emit({ kind: 'step.end', runId, stepIndex: i, status: 'completed', ts: Date.now() })
+
+      if (result.status === 'failed') {
+        this.deps.store.finishStep(runId, stepIndex, {
+          status: 'failed', output: result.output, error: result.error,
+          decision: null, next: null,
+        })
+        bus.emit({
+          kind: 'step.end', runId, stepIndex, stepId: step.id, agentId: agent.id,
+          status: 'failed', decision: null, next: null, output: result.output,
+          error: result.error, ts: Date.now(),
+        })
+        this.deps.store.setRunStatus(runId, 'failed', { error: result.error, stepDone })
+        bus.emit({ kind: 'run.end', runId, status: 'failed', error: result.error, ts: Date.now() })
+        this.deps.bus.markClosed(runId)
+        return
+      }
+
+      // success
+      const decision = ctx.needsDecision ? parseDecisionToken(result.output) : null
+      const next = chooseNext(step, decision, workflow.steps, stepIndex)
+      this.deps.store.finishStep(runId, stepIndex, {
+        status: 'completed', output: result.output, decision, next,
+      })
+      bus.emit({
+        kind: 'step.end', runId, stepIndex, stepId: step.id, agentId: agent.id,
+        status: 'completed', decision, next, output: result.output, ts: Date.now(),
+      })
+
       stepDone++
       this.deps.store.setRunStatus(runId, 'running', { stepDone })
+      prevOutput = result.output
+      cursorId = next
     }
 
     this.deps.store.setRunStatus(runId, 'completed', { stepDone })

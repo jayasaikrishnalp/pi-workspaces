@@ -1,14 +1,58 @@
 /**
  * Per-workflow-run SSE bus. One bus per run; subscribers (the SSE route + UI)
  * receive lifecycle + per-step events. Idiomatic small bus mirroring KbEventBus.
+ *
+ * v2 (commit 2): events carry the agent-driven workflow shape — stepId,
+ * agentId, decision, next on step.start/step.end; workflowId/name on
+ * run.start. The legacy `workflow` and `stepIndex` fields are kept on
+ * step events so existing readers don't break.
  */
 
 export type WorkflowRunEvent =
-  | { kind: 'run.start'; runId: string; workflow: string; stepCount: number; ts: number }
-  | { kind: 'step.start'; runId: string; stepIndex: number; ts: number }
-  | { kind: 'step.output'; runId: string; stepIndex: number; chunk: string; ts: number }
-  | { kind: 'step.end'; runId: string; stepIndex: number; status: 'completed' | 'failed' | 'skipped'; error?: string; ts: number }
-  | { kind: 'run.end'; runId: string; status: 'completed' | 'failed' | 'cancelled'; error?: string; ts: number }
+  | {
+      kind: 'run.start'
+      runId: string
+      workflowId: string
+      name: string
+      stepCount: number
+      ts: number
+    }
+  | {
+      kind: 'step.start'
+      runId: string
+      stepIndex: number
+      stepId: string
+      agentId: string
+      ts: number
+    }
+  | {
+      kind: 'step.output'
+      runId: string
+      stepIndex: number
+      stepId: string
+      chunk: string
+      ts: number
+    }
+  | {
+      kind: 'step.end'
+      runId: string
+      stepIndex: number
+      stepId: string
+      agentId: string
+      status: 'completed' | 'failed' | 'skipped'
+      decision: string | null
+      next: string | null
+      output: string | null
+      error?: string
+      ts: number
+    }
+  | {
+      kind: 'run.end'
+      runId: string
+      status: 'completed' | 'failed' | 'cancelled'
+      error?: string
+      ts: number
+    }
 
 type Handler = (e: WorkflowRunEvent) => void
 
