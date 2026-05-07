@@ -93,50 +93,62 @@ export interface Workflow {
 export const DEFAULT_WORKFLOWS: Workflow[] = [
   {
     id: 'wf-l1-ritm-fetch',
-    name: 'L1 Triage — Fetch RITM details',
+    name: 'L1 Triage — Fetch RITM / Jira details',
     task:
       `Single-agent workflow. L1 Triage Agent reads a ServiceNow RITM via ` +
-      `mcp__servicenow__get_ritm and returns parsed details: requested_for, ` +
-      `state, stage, short_description, parent request, and any catalog ` +
-      `variables relevant to the ask.`,
+      `mcp__servicenow__get_ritm and / or a Jira issue via ` +
+      `mcp__atlassian__jira_get_issue, then emits a parsed payload + ` +
+      `markdown summary. Provide ritm_number, jira_id, or both — the agent ` +
+      `looks up whichever fields are populated.`,
     createdAt: '2026-05-08T00:00:00Z',
+    // Both inputs are individually optional but at least one must be given.
+    // Required: false on each lets the user submit with only one filled in.
+    // The agent's note enforces "at least one" semantics at runtime.
     inputs: [
-      { name: 'ritm_number', type: 'string', required: true, desc: 'RITM number, e.g. RITM1873461' },
+      { name: 'ritm_number', type: 'string', required: false, desc: 'ServiceNow RITM, e.g. RITM1873461 (optional if jira_id provided)' },
+      { name: 'jira_id',     type: 'string', required: false, desc: 'Jira issue key, e.g. OPS-482 (optional if ritm_number provided)' },
     ],
     outputs: [
-      { name: 'parsed_ritm', type: 'json',     desc: 'Parsed RITM payload' },
-      { name: 'summary',     type: 'markdown', desc: 'Human-readable markdown summary' },
+      { name: 'parsed_ritm', type: 'json',     desc: 'Parsed ServiceNow RITM payload (when ritm_number provided)' },
+      { name: 'parsed_jira', type: 'json',     desc: 'Parsed Jira issue payload (when jira_id provided)' },
+      { name: 'summary',     type: 'markdown', desc: 'Human-readable markdown summary covering whichever sources were looked up' },
     ],
     steps: [
       {
         id: 'triage',
         agentId: 'l1-triage-agent',
         note:
-          'Call mcp__servicenow__get_ritm({ number: <ritm_number from workflow input>, include_variables: true }). ' +
-          'Parse short_description, state.display_value, stage.display_value, requested_for.display_value, ' +
-          'request.display_value (parent), and the catalog variables. Emit a markdown summary.',
+          'Read WORKFLOW INPUTS for ritm_number and/or jira_id (at least one will be set; if neither, return decision=refuse with reason). ' +
+          'For ritm_number: call mcp__servicenow__get_ritm({ number, include_variables: true }) and parse short_description, state, stage, requested_for, parent request, and catalog variables. ' +
+          'For jira_id: call mcp__atlassian__jira_get_issue({ issue_key }) and parse summary, status, priority, assignee, description. ' +
+          'Emit a single markdown summary covering whichever of the two sources were available. If both inputs are populated, fetch both and present a combined summary noting any cross-references.',
         next: 'end',
       },
     ],
-    // Without bindings, the runtime can't wire the workflow input field
-    // into the agent step's input pin — the agent receives no ritm_number
-    // and refuses with "missing required input". This binding is what
-    // makes the user-typed RITM number reach the L1 Triage Agent prompt.
+    // Wire workflow inputs into the agent step + step outputs back to
+    // workflow outputs. Without these bindings the runtime falls back to
+    // free-text prevOutput passing — which works because composePrompt
+    // also injects WORKFLOW INPUTS — but explicit bindings are clearer.
     bindings: [
       { to: 'triage.ritm_number', from: { kind: 'workflow', field: 'ritm_number' } },
+      { to: 'triage.jira_id',     from: { kind: 'workflow', field: 'jira_id' } },
       { to: 'out.parsed_ritm',    from: { kind: 'step', stepId: 'triage', field: 'parsed_ritm' } },
+      { to: 'out.parsed_jira',    from: { kind: 'step', stepId: 'triage', field: 'parsed_jira' } },
       { to: 'out.summary',        from: { kind: 'step', stepId: 'triage', field: 'summary' } },
     ],
   },
 ]
 
+// v9 extends the L1 workflow with a second input (jira_id) so the user
+// can supply either or both a SNOW RITM and a Jira issue, and the agent
+// fetches whichever is populated.
 // v8 adds the missing workflow→step binding for ritm_number (v7 shipped
 // the workflow without bindings, so the agent never received the typed
 // input and refused with "missing required input"). v7 wipes prior set
 // and ships a single minimal L1 Triage Agent
 // workflow that reads a RITM via mcp__servicenow__get_ritm. Bumped from
 // v6 so existing users get the reset without manually clearing localStorage.
-const STORAGE_KEY = 'hive.workflows.v8'
+const STORAGE_KEY = 'hive.workflows.v9'
 
 export function loadWorkflows(): Workflow[] {
   try {
