@@ -7,7 +7,8 @@ import {
   type Workflow, type WorkflowStep,
 } from '../../lib/workflows-store'
 import { loadAgents, saveAgents, AGENT_KIND_META, type Agent } from '../../lib/agents-store'
-import { createSkill, getKbGraph } from '../../lib/api'
+import { createSkill, getKbGraph, getKbSkill, updateSkill } from '../../lib/api'
+import { workflowSkillName, workflowSkillDescription, workflowToSkillMd } from '../../lib/workflow-to-skill'
 import { useWorkflowRun } from '../../hooks/useWorkflowRun'
 import { WorkflowCanvas } from './workflows/WorkflowCanvas'
 
@@ -176,6 +177,34 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
     }
   }
 
+  const [savingSkill, setSavingSkill] = useState(false)
+  const saveAsSkill = async () => {
+    if (!active) return
+    setSavingSkill(true)
+    setReconcileMsg(null)
+    try {
+      const name = workflowSkillName(active)
+      const description = workflowSkillDescription(active)
+      const content = workflowToSkillMd(active, agents)
+      // Try to detect whether the skill already exists; if so, update
+      // (PUT) instead of POST. The GET returns 404 NOT_FOUND when missing.
+      let exists = false
+      try {
+        await getKbSkill(name)
+        exists = true
+      } catch { /* 404 → create */ }
+      if (exists) {
+        await updateSkill(name, { content, frontmatter: { description } })
+        setReconcileMsg(`updated skill "${name}" from "${active.name}"`)
+      } else {
+        await createSkill({ name, content, frontmatter: { description } })
+        setReconcileMsg(`saved as skill "${name}" — ready for pi`)
+      }
+    } catch (err) {
+      setReconcileMsg(`error saving skill: ${(err as Error).message}`)
+    } finally { setSavingSkill(false) }
+  }
+
   return (
     <div className="page-root workflows-screen" data-testid="workflows" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div className="page-header" style={{ display: 'flex', gap: 8, padding: '12px 16px', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
@@ -187,6 +216,13 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
         <input ref={fileRef} type="file" accept=".yaml,.yml,application/yaml,text/yaml" style={{ display: 'none' }} onChange={onUploadFile} data-testid="workflows-upload-input" />
         <button className="btn btn-ghost small" onClick={() => fileRef.current?.click()} data-testid="workflows-upload">Upload .yaml</button>
         <button className="btn btn-ghost small" disabled={!active} onClick={exportYaml} data-testid="workflows-export">Export .yaml</button>
+        <button
+          className="btn btn-ghost small"
+          disabled={!active || savingSkill || (active?.steps.length ?? 0) === 0}
+          onClick={() => { void saveAsSkill() }}
+          data-testid="workflows-save-as-skill"
+          title="Persist this workflow as a SKILL.md so pi can invoke it. Updates if a skill with the same name already exists."
+        >{savingSkill ? 'saving…' : 'Save as Skill'}</button>
         <button className="btn btn-accent small" onClick={createNew} data-testid="workflows-new">+ New workflow</button>
       </div>
 

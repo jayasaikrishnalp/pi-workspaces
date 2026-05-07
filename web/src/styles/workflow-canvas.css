@@ -53,6 +53,58 @@
 .wf-terminal.done    { color: #7ac88c; border-color: rgba(122,200,140,0.45); }
 .wf-terminal-label   { font-weight: 700; }
 
+/* The START / END terminals can stack a small pin list under the label
+   when the workflow has external inputs / outputs declared. */
+.wf-terminal { flex-direction: column; height: auto; min-height: 32px; padding: 6px 12px; }
+.wf-terminal-pins {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255,255,255,0.12);
+  display: flex; flex-direction: column; gap: 3px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  width: 100%;
+}
+
+/* Per-card I/O pin sections (under the agent body). */
+.wf-card-pins {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 4px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.wf-card-pins.outputs { border-left: 2px solid color-mix(in srgb, var(--k) 60%, transparent); }
+.wf-card-pins.inputs  { border-left: 2px solid rgba(255,255,255,0.18); }
+.wf-card-pins-label {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px; opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.wf-pin-row {
+  display: flex; align-items: center; gap: 6px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+.wf-pin-name { color: rgba(255,255,255,0.85); }
+.wf-pin-type {
+  color: rgba(255,255,255,0.5);
+  font-size: 9.5px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.04);
+}
+.wf-pin-from {
+  margin-left: auto;
+  color: var(--accent, #1dacfe);
+  font-size: 9.5px;
+  opacity: 0.85;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;
+}
+.wf-pin-from.missing { color: #f87171; opacity: 1; }
+
 .wf-card {
   position: relative;
   background: rgba(20, 22, 28, 0.85);

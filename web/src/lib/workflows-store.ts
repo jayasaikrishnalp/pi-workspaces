@@ -33,7 +33,8 @@
 
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml'
 
-import type { Agent, AgentKind } from './agents-store'
+import type { Agent, AgentKind, Field } from './agents-store'
+export type { Field } from './agents-store'
 
 export interface WorkflowStep {
   /** Stable step id; auto-generated if missing. */
@@ -48,12 +49,38 @@ export interface WorkflowStep {
   branches?: Record<string, string>
 }
 
+/**
+ * One typed binding: where does a step's input field (or the workflow's
+ * output field) source its value from? Either the workflow's own input or
+ * an upstream step's output.
+ */
+export type Binding =
+  | { kind: 'workflow'; field: string }
+  | { kind: 'step'; stepId: string; field: string }
+
+/**
+ * Pin-to-pin wiring. `to` follows `<stepId>.<field>` for step inputs, or
+ * `out.<field>` for workflow outputs (the END node).
+ */
+export interface Edge {
+  to: string
+  from: Binding
+}
+
 export interface Workflow {
   id: string
   name: string
   task: string
   createdAt: string
   steps: WorkflowStep[]
+  /** Workflow-level external inputs (the START node's output pins). Optional
+   *  for back-compat — older workflows just omit this. */
+  inputs?: Field[]
+  /** Workflow-level outputs (the END node's input pins). */
+  outputs?: Field[]
+  /** Pin-to-pin wiring graph. When present, the runner can resolve typed
+   *  values per step instead of relying on free-text prevOutput. */
+  bindings?: Edge[]
 }
 
 export const DEFAULT_WORKFLOWS: Workflow[] = [
@@ -65,6 +92,15 @@ export const DEFAULT_WORKFLOWS: Workflow[] = [
       `ServiceNow files the change request and waits for approval. On approve → L1 Triage ` +
       `re-confirms scope, then AWS Agent terminates. On no-approve → workflow stops.`,
     createdAt: '2026-05-07T09:00:00Z',
+    inputs: [
+      { name: 'host',         type: 'hostname',                  required: true, desc: 'Instance to delete' },
+      { name: 'request_type', type: 'enum<delete|reboot|patch>', required: true, desc: "Always 'delete' for this flow" },
+    ],
+    outputs: [
+      { name: 'status',        type: 'enum<terminated|failed|rolled-back>' },
+      { name: 'snapshot_id',   type: 'string' },
+      { name: 'audit_log_url', type: 'url' },
+    ],
     steps: [
       { id: 'triage', agentId: 'l1-triage-agent', note: 'Validate request, attach CMDB + owner, snapshot state' },
       {
@@ -75,6 +111,25 @@ export const DEFAULT_WORKFLOWS: Workflow[] = [
       { id: 're-confirm', agentId: 'l1-triage-agent', note: 'Re-confirm scope post-approval' },
       { id: 'terminate', agentId: 'aws-agent', note: 'Stop → snapshot → terminate → release EIP/ENI; log everything' },
     ],
+    bindings: [
+      // L1 triage inputs come from the workflow's external inputs
+      { to: 'triage.host',         from: { kind: 'workflow', field: 'host' } },
+      { to: 'triage.request_type', from: { kind: 'workflow', field: 'request_type' } },
+      // ServiceNow gets the triage report + owner email
+      { to: 'file-chg.triage_report', from: { kind: 'step', stepId: 'triage', field: 'triage_report' } },
+      { to: 'file-chg.owner_email',   from: { kind: 'step', stepId: 'triage', field: 'owner_email' } },
+      // Re-confirm just re-runs L1 triage (same inputs from workflow)
+      { to: 're-confirm.host',         from: { kind: 'workflow', field: 'host' } },
+      { to: 're-confirm.request_type', from: { kind: 'workflow', field: 'request_type' } },
+      // AWS terminator gets host + the CAB decision + chg number
+      { to: 'terminate.host',       from: { kind: 'workflow', field: 'host' } },
+      { to: 'terminate.decision',   from: { kind: 'step', stepId: 'file-chg', field: 'decision' } },
+      { to: 'terminate.chg_number', from: { kind: 'step', stepId: 'file-chg', field: 'chg_number' } },
+      // Workflow outputs from the AWS step
+      { to: 'out.status',        from: { kind: 'step', stepId: 'terminate', field: 'status' } },
+      { to: 'out.snapshot_id',   from: { kind: 'step', stepId: 'terminate', field: 'snapshot_id' } },
+      { to: 'out.audit_log_url', from: { kind: 'step', stepId: 'terminate', field: 'audit_log_url' } },
+    ],
   },
   {
     id: 'wf-cloudops-dashboard',
@@ -84,6 +139,14 @@ export const DEFAULT_WORKFLOWS: Workflow[] = [
       `Repo lives at ~/work/cloudops-dashboard. Deploy preview to Vercel staging, ` +
       `post the URL back to the Jira ticket, leave the ticket in "In Review".`,
     createdAt: '2026-05-06T14:21:00Z',
+    inputs: [
+      { name: 'ticket_key', type: 'string', required: true, desc: 'e.g. OPS-482' },
+    ],
+    outputs: [
+      { name: 'preview_url', type: 'url' },
+      { name: 'branch',      type: 'string' },
+      { name: 'smoke_pass',  type: 'bool' },
+    ],
     steps: [
       { id: 'fetch-ticket', agentId: 'jira-agent',        note: 'Read OPS-482, parse criteria' },
       { id: 'spec',         agentId: 'spec-design-agent', note: 'Generate SPEC.md' },
@@ -91,14 +154,38 @@ export const DEFAULT_WORKFLOWS: Workflow[] = [
       {
         id: 'review', agentId: 'code-review-agent',
         note: 'Review diff; route back to coding on issues',
-        branches: { approved: 'deploy', issues: 'implement' },
+        branches: { approve: 'deploy', changes: 'implement' },
       },
       { id: 'deploy', agentId: 'deploy-agent', note: 'Build + deploy + comment ticket' },
+    ],
+    bindings: [
+      // Jira agent input ← workflow input
+      { to: 'fetch-ticket.ticket_key', from: { kind: 'workflow', field: 'ticket_key' } },
+      // Spec from Jira outputs
+      { to: 'spec.title',      from: { kind: 'step', stepId: 'fetch-ticket', field: 'title' } },
+      { to: 'spec.acceptance', from: { kind: 'step', stepId: 'fetch-ticket', field: 'acceptance' } },
+      // Coding from spec
+      { to: 'implement.spec_path', from: { kind: 'step', stepId: 'spec', field: 'spec_path' } },
+      // Review from coding diff + spec
+      { to: 'review.diff',      from: { kind: 'step', stepId: 'implement', field: 'diff' } },
+      { to: 'review.spec_path', from: { kind: 'step', stepId: 'spec',      field: 'spec_path' } },
+      // Deploy from coding branch + Jira ticket url + review decision
+      { to: 'deploy.branch',     from: { kind: 'step', stepId: 'implement',    field: 'branch' } },
+      { to: 'deploy.ticket_url', from: { kind: 'step', stepId: 'fetch-ticket', field: 'ticket_url' } },
+      { to: 'deploy.decision',   from: { kind: 'step', stepId: 'review',       field: 'decision' } },
+      // Workflow outputs
+      { to: 'out.preview_url', from: { kind: 'step', stepId: 'deploy',    field: 'preview_url' } },
+      { to: 'out.branch',      from: { kind: 'step', stepId: 'implement', field: 'branch' } },
+      { to: 'out.smoke_pass',  from: { kind: 'step', stepId: 'deploy',    field: 'smoke_pass' } },
     ],
   },
 ]
 
-const STORAGE_KEY = 'hive.workflows.v3'
+// v4 introduces typed inputs/outputs/bindings on workflows. Bump key so
+// users with stale localStorage from v3 get the fresh seeded workflows
+// (cloudops-dashboard with full pin-to-pin wiring + server-deletion with
+// typed bindings).
+const STORAGE_KEY = 'hive.workflows.v4'
 
 export function loadWorkflows(): Workflow[] {
   try {
@@ -127,6 +214,13 @@ export function newWorkflow(): Workflow {
 
 /* ===== YAML serialization ===== */
 
+interface YamlField {
+  name: string
+  type: string
+  required?: boolean
+  desc?: string
+}
+
 interface YamlAgent {
   id: string
   name: string
@@ -135,6 +229,8 @@ interface YamlAgent {
   skills: string[]
   prompt: string
   role?: string
+  inputs?: YamlField[]
+  outputs?: YamlField[]
 }
 
 interface YamlFlowStep {
@@ -145,13 +241,35 @@ interface YamlFlowStep {
   branches?: Record<string, string>
 }
 
+interface YamlBinding {
+  to: string
+  from: string  // serialized: 'workflow.<field>' | '<stepId>.<field>'
+}
+
 interface YamlWorkflow {
   schema: 'hive.workflow/v1'
   id: string
   name: string
   task: string
+  inputs?: YamlField[]
+  outputs?: YamlField[]
   agents?: YamlAgent[]
   flow: YamlFlowStep[]
+  bindings?: YamlBinding[]
+}
+
+function bindingToString(b: Binding): string {
+  return b.kind === 'workflow' ? `workflow.${b.field}` : `${b.stepId}.${b.field}`
+}
+
+function bindingFromString(s: string): Binding | null {
+  const dot = s.indexOf('.')
+  if (dot < 1) return null
+  const lhs = s.slice(0, dot)
+  const field = s.slice(dot + 1)
+  if (!field) return null
+  if (lhs === 'workflow') return { kind: 'workflow', field }
+  return { kind: 'step', stepId: lhs, field }
 }
 
 /** Serialize a workflow + the agent definitions it references to YAML.
@@ -160,20 +278,22 @@ export function workflowToYaml(workflow: Workflow, roster: Agent[]): string {
   const usedIds = new Set(workflow.steps.map((s) => s.agentId))
   const usedAgents: YamlAgent[] = roster
     .filter((a) => usedIds.has(a.id))
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      kind: a.kind,
-      role: a.role,
-      model: a.model,
-      skills: a.skills,
-      prompt: a.prompt,
-    }))
+    .map((a) => {
+      const out: YamlAgent = {
+        id: a.id, name: a.name, kind: a.kind, role: a.role,
+        model: a.model, skills: a.skills, prompt: a.prompt,
+      }
+      if (a.inputs && a.inputs.length > 0) out.inputs = a.inputs
+      if (a.outputs && a.outputs.length > 0) out.outputs = a.outputs
+      return out
+    })
   const yaml: YamlWorkflow = {
     schema: 'hive.workflow/v1',
     id: workflow.id,
     name: workflow.name,
     task: workflow.task,
+    ...(workflow.inputs && workflow.inputs.length > 0 ? { inputs: workflow.inputs } : {}),
+    ...(workflow.outputs && workflow.outputs.length > 0 ? { outputs: workflow.outputs } : {}),
     agents: usedAgents,
     flow: workflow.steps.map((s, i) => {
       const out: YamlFlowStep = { id: s.id || `step-${i + 1}`, agent: s.agentId }
@@ -182,6 +302,9 @@ export function workflowToYaml(workflow: Workflow, roster: Agent[]): string {
       if (s.branches && Object.keys(s.branches).length > 0) out.branches = s.branches
       return out
     }),
+    ...(workflow.bindings && workflow.bindings.length > 0 ? {
+      bindings: workflow.bindings.map((b) => ({ to: b.to, from: bindingToString(b.from) })),
+    } : {}),
   }
   return yamlStringify(yaml, { lineWidth: 100, blockQuote: 'literal' })
 }
@@ -215,12 +338,26 @@ export function parseWorkflowYaml(
   if (!Array.isArray(flowRaw) || flowRaw.length === 0) throw new Error('workflow.flow must be a non-empty list')
 
   // Inlined agents (optional).
+  const parseFields = (raw: unknown): Field[] | undefined => {
+    if (!Array.isArray(raw)) return undefined
+    const out: Field[] = []
+    for (const f of raw as Array<Record<string, unknown>>) {
+      if (!f || typeof f !== 'object') continue
+      if (typeof f.name !== 'string' || typeof f.type !== 'string') continue
+      const field: Field = { name: f.name, type: f.type }
+      if (typeof f.required === 'boolean') field.required = f.required
+      if (typeof f.desc === 'string') field.desc = f.desc
+      out.push(field)
+    }
+    return out.length > 0 ? out : undefined
+  }
+
   const inlinedAgents: Agent[] = []
   if (Array.isArray(obj.agents)) {
     for (const a of obj.agents as Array<Record<string, unknown>>) {
       if (typeof a.id !== 'string' || typeof a.name !== 'string') continue
       const kind = (typeof a.kind === 'string' ? a.kind : 'specialist') as AgentKind
-      inlinedAgents.push({
+      const agent: Agent = {
         id: a.id,
         name: a.name,
         kind,
@@ -228,7 +365,12 @@ export function parseWorkflowYaml(
         model: typeof a.model === 'string' ? a.model : 'claude-sonnet-4-5',
         skills: Array.isArray(a.skills) ? (a.skills as unknown[]).filter((s): s is string => typeof s === 'string') : [],
         prompt: typeof a.prompt === 'string' ? a.prompt : '',
-      })
+      }
+      const inputs = parseFields(a.inputs)
+      const outputs = parseFields(a.outputs)
+      if (inputs) agent.inputs = inputs
+      if (outputs) agent.outputs = outputs
+      inlinedAgents.push(agent)
     }
   }
 
@@ -259,6 +401,24 @@ export function parseWorkflowYaml(
     task,
     createdAt: typeof obj.createdAt === 'string' ? obj.createdAt : new Date().toISOString(),
     steps,
+  }
+  const wfInputs = parseFields(obj.inputs)
+  const wfOutputs = parseFields(obj.outputs)
+  if (wfInputs) workflow.inputs = wfInputs
+  if (wfOutputs) workflow.outputs = wfOutputs
+
+  // Bindings (typed pin-to-pin map). YAML form is { to, from } where `from`
+  // is a dotted string ("workflow.<field>" | "<stepId>.<field>").
+  if (Array.isArray(obj.bindings)) {
+    const bindings: Edge[] = []
+    for (const b of obj.bindings as Array<Record<string, unknown>>) {
+      if (!b || typeof b !== 'object') continue
+      if (typeof b.to !== 'string' || typeof b.from !== 'string') continue
+      const from = bindingFromString(b.from)
+      if (!from) continue
+      bindings.push({ to: b.to, from })
+    }
+    if (bindings.length > 0) workflow.bindings = bindings
   }
 
   // Reconcile.

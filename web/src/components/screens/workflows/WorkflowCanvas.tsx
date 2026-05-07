@@ -131,6 +131,13 @@ export function WorkflowCanvas({ workflow, agents, runState, onCancel }: Props):
   const terminals = useMemo(() => terminalSteps(workflow), [workflow])
   const entryId = workflow.steps[0]?.id ?? null
 
+  // Index typed bindings by `to` so each card can look up "what's wired to my input X?".
+  const bindingsByTo = useMemo(() => {
+    const m = new Map<string, { kind: 'workflow'; field: string } | { kind: 'step'; stepId: string; field: string }>()
+    for (const b of workflow.bindings ?? []) m.set(b.to, b.from)
+    return m
+  }, [workflow.bindings])
+
   // Edge classification for the run state.
   const edgeClass = (fromId: string, toId: string, branchKey: string | undefined, isBackEdge: boolean): string => {
     void toId
@@ -186,6 +193,7 @@ export function WorkflowCanvas({ workflow, agents, runState, onCancel }: Props):
             column={1}
             running={runState.status === 'running'}
             done={runState.status === 'completed'}
+            fields={workflow.inputs}
           />
 
           {layout.cells.map((cell) => (
@@ -198,6 +206,7 @@ export function WorkflowCanvas({ workflow, agents, runState, onCancel }: Props):
               cardState={runState.cards[cell.step.id]}
               isOpen={openStepId === cell.step.id}
               onClick={() => setOpenStepId(cell.step.id === openStepId ? null : cell.step.id)}
+              bindingsByTo={bindingsByTo}
             />
           ))}
 
@@ -207,6 +216,7 @@ export function WorkflowCanvas({ workflow, agents, runState, onCancel }: Props):
             ref={(el) => { cardRefs.current[END_ID] = el }}
             column={totalColumns}
             done={runState.status === 'completed'}
+            fields={workflow.outputs}
           />
         </div>
 
@@ -289,11 +299,14 @@ interface CardCellProps {
   cardState: CardState | undefined
   isOpen: boolean
   onClick: () => void
+  /** Bindings keyed by `<stepId>.<field>` so each card can render "← from" hints
+   *  next to its input pins. */
+  bindingsByTo: Map<string, { kind: 'workflow'; field: string } | { kind: 'step'; stepId: string; field: string }>
 }
 
 const CardCell = (() => {
   const Component = (props: CardCellProps & { cardRef?: (el: HTMLDivElement | null) => void }) => {
-    const { cell, columnOffset, agent, cardState, isOpen, onClick, cardRef } = props
+    const { cell, columnOffset, agent, cardState, isOpen, onClick, cardRef, bindingsByTo } = props
     const meta = agent ? AGENT_KIND_META[agent.kind] : null
     const Icon = agent && meta ? iconFor(meta.icon) : Icons.conductor
     const status = cardState?.status ?? 'idle'
@@ -327,6 +340,42 @@ const CardCell = (() => {
           {agent ? `${agent.kind} · ${agent.model}` : 'unknown agent'}
         </div>
         {cell.step.note ? <div className="wf-card-note">{cell.step.note}</div> : null}
+
+        {agent?.inputs && agent.inputs.length > 0 ? (
+          <div className="wf-card-pins inputs" data-testid={`wf-card-inputs-${cell.step.id}`}>
+            <div className="wf-card-pins-label">in</div>
+            {agent.inputs.map((p) => {
+              const src = bindingsByTo.get(`${cell.step.id}.${p.name}`)
+              const wired = src
+                ? (src.kind === 'workflow' ? `workflow.${src.field}` : `${src.stepId}.${src.field}`)
+                : null
+              return (
+                <div key={p.name} className="wf-pin-row" title={p.desc ?? ''}>
+                  <span className="wf-pin-name">{p.name}</span>
+                  <span className="wf-pin-type">{p.type}</span>
+                  {wired ? (
+                    <span className="wf-pin-from" data-testid={`wf-pin-from-${cell.step.id}-${p.name}`}>← {wired}</span>
+                  ) : p.required ? (
+                    <span className="wf-pin-from missing">← (unwired)</span>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+
+        {agent?.outputs && agent.outputs.length > 0 ? (
+          <div className="wf-card-pins outputs" data-testid={`wf-card-outputs-${cell.step.id}`}>
+            <div className="wf-card-pins-label">out</div>
+            {agent.outputs.map((p) => (
+              <div key={p.name} className="wf-pin-row" title={p.desc ?? ''}>
+                <span className="wf-pin-name">{p.name}</span>
+                <span className="wf-pin-type">{p.type}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         {tailLine ? <div className="wf-card-tail" data-testid={`wf-card-tail-${cell.step.id}`}>{tailLine}</div> : null}
         {decision ? <span className="wf-card-decision" data-testid={`wf-card-decision-${cell.step.id}`}>DECISION: {decision}</span> : null}
       </div>
@@ -345,11 +394,13 @@ interface TerminalCellProps {
   column: number
   running?: boolean
   done?: boolean
+  /** Workflow-level inputs (rendered on START) or outputs (rendered on END). */
+  fields?: Array<{ name: string; type: string; required?: boolean }>
 }
 
 const TerminalCell = (() => {
   const Component = (props: TerminalCellProps & { cardRef?: (el: HTMLDivElement | null) => void }) => {
-    const { kind, column, running, done, cardRef } = props
+    const { kind, column, running, done, fields, cardRef } = props
     const cls = `wf-terminal wf-terminal-${kind}${running ? ' running' : ''}${done ? ' done' : ''}`
     return (
       <div
@@ -359,6 +410,16 @@ const TerminalCell = (() => {
         style={{ gridColumn: column, gridRow: 1, alignSelf: 'center' }}
       >
         <span className="wf-terminal-label">{kind === 'start' ? 'START' : 'END'}</span>
+        {fields && fields.length > 0 ? (
+          <div className="wf-terminal-pins" data-testid={`wf-terminal-pins-${kind}`}>
+            {fields.map((f) => (
+              <div key={f.name} className="wf-pin-row">
+                <span className="wf-pin-name">{f.name}</span>
+                <span className="wf-pin-type">{f.type}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     )
   }

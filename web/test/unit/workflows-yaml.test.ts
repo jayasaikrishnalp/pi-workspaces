@@ -118,6 +118,51 @@ flow:
   })
 })
 
+describe('typed I/O contracts round-trip', () => {
+  it('preserves workflow inputs/outputs and bindings through YAML', () => {
+    const wf = {
+      id: 'wf-typed', name: 'Typed', task: 'demo', createdAt: 'x',
+      inputs: [{ name: 'host', type: 'hostname', required: true, desc: 'Target' }],
+      outputs: [{ name: 'status', type: 'enum<ok|fail>' }],
+      steps: [
+        { id: 'triage', agentId: 'l1-triage-agent', note: 'check' },
+      ],
+      bindings: [
+        { to: 'triage.host', from: { kind: 'workflow' as const, field: 'host' } },
+        { to: 'triage.request_type', from: { kind: 'workflow' as const, field: 'host' } },
+        { to: 'out.status', from: { kind: 'step' as const, stepId: 'triage', field: 'policy_pass' } },
+      ],
+    }
+    const yaml = workflowToYaml(wf, DEFAULT_AGENT_ROSTER)
+    expect(yaml).toContain('inputs:')
+    expect(yaml).toContain('outputs:')
+    expect(yaml).toContain('bindings:')
+    expect(yaml).toMatch(/from: workflow\.host/)
+    expect(yaml).toMatch(/from: triage\.policy_pass/)
+    const parsed = parseWorkflowYaml(yaml, DEFAULT_AGENT_ROSTER, new Set())
+    expect(parsed.workflow.inputs?.[0]?.name).toBe('host')
+    expect(parsed.workflow.outputs?.[0]?.type).toBe('enum<ok|fail>')
+    expect(parsed.workflow.bindings).toHaveLength(3)
+    expect(parsed.workflow.bindings![0]?.from).toEqual({ kind: 'workflow', field: 'host' })
+    expect(parsed.workflow.bindings![2]?.from).toEqual({ kind: 'step', stepId: 'triage', field: 'policy_pass' })
+  })
+
+  it('preserves agent inputs/outputs through YAML inline-agent serialization', () => {
+    const wf = {
+      id: 'wf-x', name: 'x', task: '', createdAt: 'x',
+      steps: [{ id: 'j', agentId: 'jira-agent' }],
+    }
+    const yaml = workflowToYaml(wf as never, DEFAULT_AGENT_ROSTER)
+    // jira-agent has typed I/O — they should round-trip
+    expect(yaml).toMatch(/name: ticket_key/)
+    expect(yaml).toMatch(/name: acceptance/)
+    const parsed = parseWorkflowYaml(yaml, [], new Set())
+    const jira = parsed.inlinedAgents.find((a) => a.id === 'jira-agent')
+    expect(jira?.inputs?.[0]?.name).toBe('ticket_key')
+    expect(jira?.outputs?.find((o) => o.name === 'ticket_url')?.type).toBe('url')
+  })
+})
+
 describe('stubAgent', () => {
   it('produces a kebab→Title cased name and specialist kind', () => {
     const a: Agent = stubAgent('my-cool-agent')
