@@ -9,6 +9,7 @@ import { PiRpcBridge, getPiRpcBridge } from './pi-rpc-bridge.js'
 import { KbEventBus, getKbEventBus } from './kb-event-bus.js'
 import { KbWatcher } from './kb-watcher.js'
 import { ConfluenceClient, ALLOWED_BASE_URL } from './confluence-client.js'
+import { buildSecretEnv } from './secret-store.js'
 import { AuthStore, getAuthStore } from './auth-store.js'
 import { SecretStore, getSecretStore } from './secret-store.js'
 import fsSync from 'node:fs'
@@ -25,7 +26,8 @@ import { WorkflowRunBusRegistry } from './workflow-run-bus.js'
 import { WorkflowRunner } from './workflow-runner.js'
 import type { SessionInfo } from '../types/run.js'
 
-const DEFAULT_WIKI_ROOT = '/Users/jayasaikrishnayerramsetty/pipeline-information/wiki'
+const DEFAULT_WIKI_ROOT = path.join(os.homedir(), 'pipeline-information', 'wiki')
+const DEFAULT_WIKI_UI_ROOT = path.join(os.homedir(), 'pipeline-information', 'llm-wiki-ui')
 
 export type SpawnPi = (args: readonly string[], opts?: SpawnOptions) => ChildProcess
 
@@ -68,6 +70,11 @@ export interface Wiring {
   wikiStore: WikiStore | null
   wikiRoot: string | null
   wikiWatcher: WikiWatcher | null
+  /** Filesystem root for the llm-wiki-ui static bundle served via
+   *  /api/wiki-ui/*. null when the directory is missing. */
+  wikiUiRoot: string | null
+  /** Ingester instance so /api/wiki/reindex can trigger a manual rebuild. */
+  wikiIngester: WikiIngester | null
   /** Workflow run engine — null only when SQLite is absent. */
   workflowRunsStore: WorkflowRunsStore | null
   workflowRunBuses: WorkflowRunBusRegistry | null
@@ -134,27 +141,44 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     })
   }
 
-  // Confluence (unchanged).
-  const confluenceBaseUrl = process.env.CONFLUENCE_BASE_URL ?? ALLOWED_BASE_URL
-  const confluenceEmail = process.env.ATLASSIAN_EMAIL ?? ''
-  const confluenceToken = process.env.ATLASSIAN_API_TOKEN ?? process.env.JIRA_TOKEN ?? ''
+  // Confluence — must merge `process.env` with `buildSecretEnv(secretStore)`
+  // so creds saved via the Secrets UI work the same as creds exported in the
+  // shell. Rebuilt initially after `secretStore.load()` resolves AND on every
+  // 'change' event.
   let confluence: ConfluenceClient | null = null
   let confluenceConfigured = false
   let confluenceConfigError: string | undefined
-  if (confluenceBaseUrl && confluenceEmail && confluenceToken) {
-    try {
-      confluence = new ConfluenceClient({
-        baseUrl: confluenceBaseUrl,
-        email: confluenceEmail,
-        apiToken: confluenceToken,
-      })
-      confluenceConfigured = true
-    } catch (err) {
-      confluenceConfigError = (err as Error).message
+  const rebuildConfluence = (): void => {
+    const secretEnv = buildSecretEnv(secretStore)
+    const baseUrl = secretEnv.CONFLUENCE_BASE_URL ?? process.env.CONFLUENCE_BASE_URL ?? ALLOWED_BASE_URL
+    const email   = secretEnv.ATLASSIAN_EMAIL    ?? process.env.ATLASSIAN_EMAIL    ?? ''
+    const token   = secretEnv.ATLASSIAN_API_TOKEN ?? process.env.ATLASSIAN_API_TOKEN ?? secretEnv.JIRA_TOKEN ?? process.env.JIRA_TOKEN ?? ''
+    if (baseUrl && email && token) {
+      try {
+        confluence = new ConfluenceClient({ baseUrl, email, apiToken: token })
+        confluenceConfigured = true
+        confluenceConfigError = undefined
+      } catch (err) {
+        confluence = null
+        confluenceConfigured = false
+        confluenceConfigError = (err as Error).message
+      }
+    } else {
+      confluence = null
+      confluenceConfigured = false
+      confluenceConfigError = 'CONFLUENCE_BASE_URL / ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN (or JIRA_TOKEN) not set in env or secret store (jira.email / jira.token / confluence.base_url)'
     }
-  } else {
-    confluenceConfigError = 'CONFLUENCE_BASE_URL / ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN (or JIRA_TOKEN) not all set'
   }
+  rebuildConfluence() // sync initial pass — reads whatever is already loaded (env, plus any pre-loaded secrets)
+  secretStore.on('change', () => {
+    rebuildConfluence()
+    // Mutate the wiring object below so route handlers see the new client.
+    if (globalThis.__wiring) {
+      globalThis.__wiring.confluence = confluence
+      globalThis.__wiring.confluenceConfigured = confluenceConfigured
+      globalThis.__wiring.confluenceConfigError = confluenceConfigError
+    }
+  })
 
   const spawnPi: SpawnPi = options.spawnPi ?? ((args, opts) => spawn('pi', [...args], opts ?? {}))
   const bashPath = process.env.PI_WORKSPACE_BASH_PATH ?? '/bin/bash'
@@ -200,24 +224,32 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   const wikiRoot = process.env.WIKI_ROOT ?? DEFAULT_WIKI_ROOT
   let wikiStore: WikiStore | null = null
   let wikiWatcher: WikiWatcher | null = null
+  let wikiIngester: WikiIngester | null = null
   let resolvedWikiRoot: string | null = null
   if (db && fsSync.existsSync(wikiRoot)) {
     wikiStore = new WikiStore(db)
     resolvedWikiRoot = wikiRoot
-    const ingester = new WikiIngester(wikiStore, wikiRoot)
-    void ingester.ingestAll().then(({ count, durationMs }) => {
+    wikiIngester = new WikiIngester(wikiStore, wikiRoot)
+    void wikiIngester.ingestAll().then(({ count, durationMs }) => {
       console.log(`[wiki] indexed ${count} docs from ${wikiRoot} in ${durationMs}ms`)
     }).catch((err) => {
       console.error('[wiki] initial ingest failed:', err)
     })
     if (options.startWatcher !== false && process.env.PI_WORKSPACE_DISABLE_WATCHER !== '1') {
-      wikiWatcher = new WikiWatcher({ root: wikiRoot, ingester })
+      wikiWatcher = new WikiWatcher({ root: wikiRoot, ingester: wikiIngester })
       void wikiWatcher.start().catch((err) => {
         console.error('[wiki] watcher failed to start:', err)
       })
     }
   } else if (db) {
     console.log(`[wiki] root not found (${wikiRoot}); search-wiki disabled`)
+  }
+
+  // Static llm-wiki-ui bundle. Optional — null if directory missing.
+  const wikiUiCandidate = process.env.WIKI_UI_ROOT ?? DEFAULT_WIKI_UI_ROOT
+  const wikiUiRoot = fsSync.existsSync(wikiUiCandidate) ? wikiUiCandidate : null
+  if (db && !wikiUiRoot) {
+    console.log(`[wiki] ui root not found (${wikiUiCandidate}); /api/wiki-ui disabled`)
   }
 
   // Workflow run engine — depends on SQLite. Tests without `db` get nulls.
@@ -241,13 +273,23 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     confluence, confluenceConfigured, confluenceConfigError,
     authStore, secretStore, workspaceRoot: root, spawnPi, spawnBash, mcpBroker, db,
     wikiStore, wikiRoot: resolvedWikiRoot, wikiWatcher,
+    wikiUiRoot, wikiIngester,
     workflowRunsStore, workflowRunBuses, workflowRunner,
   }
   globalThis.__wiring = w
   void authStore.load().catch((err) => {
     console.error('[wiring] auth store load failed:', err)
   })
-  void secretStore.load().catch((err) => {
+  void secretStore.load().then(() => {
+    // Force one rebuild after the on-disk secrets are loaded — the sync
+    // rebuild at boot ran before this resolved.
+    rebuildConfluence()
+    if (globalThis.__wiring) {
+      globalThis.__wiring.confluence = confluence
+      globalThis.__wiring.confluenceConfigured = confluenceConfigured
+      globalThis.__wiring.confluenceConfigError = confluenceConfigError
+    }
+  }).catch((err) => {
     console.error('[wiring] secret store load failed:', err)
   })
   return w

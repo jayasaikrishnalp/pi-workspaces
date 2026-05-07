@@ -117,8 +117,10 @@ import {
 import { handleProbe, PROBE_PATH } from './routes/probe.js'
 import {
   handleWikiStats, handleWikiDocs, handleWikiDoc, handleWikiSearch, handleSearchWikiTool,
-  WIKI_STATS_PATH, WIKI_DOCS_PATH, WIKI_DOC_PATH, WIKI_SEARCH_PATH, TOOLS_SEARCH_WIKI_PATH,
+  handleWikiReindex,
+  WIKI_STATS_PATH, WIKI_DOCS_PATH, WIKI_DOC_PATH, WIKI_SEARCH_PATH, WIKI_REINDEX_PATH, TOOLS_SEARCH_WIKI_PATH,
 } from './routes/wiki.js'
+import { handleWikiUi, WIKI_UI_PREFIX } from './routes/wiki-ui.js'
 import {
   handleWorkflowRunStart, handleWorkflowRunCancel, handleWorkflowRunsList,
   handleWorkflowRunDetail, handleWorkflowRunEvents,
@@ -232,6 +234,7 @@ const ROUTES: Route[] = [
   { method: 'GET', pattern: WIKI_DOCS_PATH, handler: handleWikiDocs },
   { method: 'GET', pattern: WIKI_DOC_PATH, handler: handleWikiDoc },
   { method: 'POST', pattern: WIKI_SEARCH_PATH, handler: handleWikiSearch },
+  { method: 'POST', pattern: WIKI_REINDEX_PATH, handler: handleWikiReindex },
   { method: 'POST', pattern: TOOLS_SEARCH_WIKI_PATH, handler: handleSearchWikiTool },
 
   // Workflow runs — Conductor canvas execution.
@@ -288,6 +291,16 @@ function dispatch(req: IncomingMessage, res: ServerResponse, w: Wiring): void {
   const authDecision = checkAuth(req, reqPath, w.authStore ?? null)
   if (!authDecision.allowed) {
     jsonError(res, 401, 'AUTH_REQUIRED', `auth required (${authDecision.reason ?? 'no_cookie'})`)
+    return
+  }
+
+  // /api/wiki-ui/* — static-file passthrough. Variable-length suffix
+  // doesn't fit matchPath's segment-equal model, so we intercept here.
+  if (method === 'GET' && reqPath.startsWith(WIKI_UI_PREFIX)) {
+    Promise.resolve(handleWikiUi(req, res, w)).catch((err) => {
+      console.error('[server] wiki-ui handler threw:', err)
+      if (!res.headersSent) jsonError(res, 500, 'INTERNAL_ERROR', (err as Error).message ?? 'unknown')
+    })
     return
   }
 

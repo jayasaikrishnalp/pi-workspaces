@@ -11,6 +11,7 @@ export const WIKI_STATS_PATH = '/api/wiki/stats'
 export const WIKI_DOCS_PATH = '/api/wiki/docs'
 export const WIKI_DOC_PATH = '/api/wiki/doc'
 export const WIKI_SEARCH_PATH = '/api/wiki/search'
+export const WIKI_REINDEX_PATH = '/api/wiki/reindex'
 export const TOOLS_SEARCH_WIKI_PATH = '/api/tools/search-wiki'
 
 export async function handleWikiStats(_req: IncomingMessage, res: ServerResponse, w: Wiring): Promise<void> {
@@ -93,6 +94,19 @@ export async function handleSearchWikiTool(req: IncomingMessage, res: ServerResp
   }
   const cap = typeof limit === 'number' ? limit : 5
   jsonOk(res, 200, searchWiki(w.wikiStore, query, cap))
+}
+
+export async function handleWikiReindex(_req: IncomingMessage, res: ServerResponse, w: Wiring): Promise<void> {
+  if (!w.wikiIngester || !w.wikiStore) {
+    jsonError(res, 503, 'WIKI_DISABLED', 'wiki ingester not configured')
+    return
+  }
+  try {
+    const { count, durationMs } = await w.wikiIngester.ingestAll()
+    jsonOk(res, 200, { count, durationMs, lastIngestAt: w.wikiStore.lastIngestAt() })
+  } catch (err) {
+    jsonError(res, 500, 'INTERNAL_ERROR', (err as Error).message)
+  }
 }
 
 export { SEARCH_WIKI_TOOL }

@@ -2,18 +2,23 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { useApi } from '../../hooks/useApi'
 import {
-  wikiStats, wikiDocs, wikiDoc, wikiSearch,
+  wikiStats, wikiDocs, wikiDoc, wikiSearch, wikiReindex,
   type WikiDocSummary, type WikiDocFull, type WikiSearchHit,
 } from '../../lib/api'
+
+type View = 'visual' | 'search'
 
 export function KnowledgeBaseScreen(): JSX.Element {
   const stats = useApi('wiki.stats', wikiStats)
   const list = useApi('wiki.docs', () => wikiDocs({ limit: 1000 }))
+  const [view, setView] = useState<View>('visual')
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<WikiSearchHit[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [searchErr, setSearchErr] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const [reindexing, setReindexing] = useState(false)
+  const [reindexMsg, setReindexMsg] = useState<string | null>(null)
 
   // Debounced search
   useEffect(() => {
@@ -29,6 +34,20 @@ export function KnowledgeBaseScreen(): JSX.Element {
   }, [q])
 
   const grouped = useMemo(() => groupByPrefix(list.data?.docs ?? []), [list.data?.docs])
+
+  const onReindex = async () => {
+    setReindexing(true); setReindexMsg(null)
+    try {
+      const r = await wikiReindex()
+      setReindexMsg(`indexed ${r.count} docs in ${r.durationMs}ms`)
+      stats.reload()
+      list.reload()
+    } catch (e) {
+      setReindexMsg(`error: ${(e as Error).message}`)
+    } finally {
+      setReindexing(false)
+    }
+  }
 
   return (
     <div className="kb-screen" data-testid="knowledge-base">
@@ -49,8 +68,37 @@ export function KnowledgeBaseScreen(): JSX.Element {
             )
           ) : 'loading…'}
         </div>
+        <div style={{ display: 'flex', gap: 8, padding: '4px 16px 8px', alignItems: 'center' }}>
+          <button
+            className={`btn ${view === 'visual' ? 'btn-accent' : 'btn-ghost'} small`}
+            onClick={() => setView('visual')}
+            data-testid="kb-view-visual"
+          >Visual</button>
+          <button
+            className={`btn ${view === 'search' ? 'btn-accent' : 'btn-ghost'} small`}
+            onClick={() => setView('search')}
+            data-testid="kb-view-search"
+          >Search</button>
+          <button
+            className="btn btn-ghost small"
+            disabled={reindexing}
+            onClick={() => { void onReindex() }}
+            data-testid="kb-reindex"
+            title="Re-scan WIKI_ROOT and rebuild the FTS index"
+          >{reindexing ? 'Reindexing…' : 'Reindex'}</button>
+          {reindexMsg ? <span className="kb-meta" style={{fontSize:11}}>{reindexMsg}</span> : null}
+        </div>
       </div>
 
+      {view === 'visual' ? (
+        <iframe
+          src="/api/wiki-ui/LLM%20Wiki.html"
+          title="LLM Wiki"
+          data-testid="kb-iframe"
+          style={{ flex: 1, width: '100%', height: '100%', border: 'none', minHeight: 600 }}
+        />
+      ) : (
+      <>
       <div style={{ padding: '8px 16px' }}>
         <input
           className="input"
@@ -114,6 +162,8 @@ export function KnowledgeBaseScreen(): JSX.Element {
             : <div className="dash-empty">Select a doc on the left.</div>}
         </div>
       </div>
+      </>
+      )}
     </div>
   )
 }

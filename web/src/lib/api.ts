@@ -80,6 +80,8 @@ export const wikiDocs = (params: { prefix?: string; limit?: number; offset?: num
 export const wikiDoc = (path: string) => api.get<WikiDocFull>(`/api/wiki/doc?path=${encodeURIComponent(path)}`)
 export const wikiSearch = (q: string, limit = 10) =>
   api.post<{ results: WikiSearchHit[]; source: string; query: string }>('/api/wiki/search', { q, limit })
+export const wikiReindex = () =>
+  api.post<{ count: number; durationMs: number; lastIngestAt: number | null }>('/api/wiki/reindex', {})
 
 export const probe = () => api.get<ProbeResponse>('/api/probe')
 
