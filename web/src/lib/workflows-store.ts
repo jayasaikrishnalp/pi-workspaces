@@ -346,10 +346,10 @@ export const DEFAULT_WORKFLOWS: Workflow[] = [
   },
 ]
 
-// v5 ships the RITM Fulfilment workflow + the ticket_number rename + the
-// extended L1/AWS/Azure agent contracts. Bumped from v4 so users get the
-// new default workflow without manually clearing localStorage.
-const STORAGE_KEY = 'hive.workflows.v5'
+// v6 ships the Hackathon Demo workflow (SNOW INC → AWS provisioning →
+// SNOW update → summary). Bumped from v5 so existing users get the new
+// default workflow without having to clear localStorage manually.
+const STORAGE_KEY = 'hive.workflows.v6'
 
 export function loadWorkflows(): Workflow[] {
   try {
