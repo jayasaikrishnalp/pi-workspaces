@@ -82,9 +82,12 @@ import {
 } from './routes/providers.js'
 import {
   handleMcpServersList,
+  handleMcpServerCreate,
+  handleMcpServerDelete,
   handleMcpToolsList,
   handleMcpCall,
   MCP_SERVERS_PATH,
+  MCP_SERVER_DETAIL_PATH,
   MCP_TOOLS_PATH,
   MCP_CALL_PATH,
 } from './routes/mcp.js'
@@ -193,6 +196,8 @@ const ROUTES: Route[] = [
   // MCP broker — backend client pool, three endpoints consumed by the
   // pi-bridge extension and (later) the frontend Settings tab.
   { method: 'GET', pattern: MCP_SERVERS_PATH, handler: handleMcpServersList },
+  { method: 'POST', pattern: MCP_SERVERS_PATH, handler: handleMcpServerCreate },
+  { method: 'DELETE', pattern: MCP_SERVER_DETAIL_PATH, handler: handleMcpServerDelete },
   { method: 'GET', pattern: MCP_TOOLS_PATH, handler: handleMcpToolsList },
   { method: 'POST', pattern: MCP_CALL_PATH, handler: handleMcpCall },
 

@@ -353,6 +353,15 @@ export const listMcpServers = (warm = false) =>
   api.get<{ servers: McpServerStatus[] }>(`/api/mcp/servers${warm ? '?warm=true' : ''}`)
 export const listMcpTools = () => api.get<{ tools: QualifiedTool[] }>('/api/mcp/tools')
 
+export type McpServerInput =
+  | { id: string; kind: 'stdio'; command: string; args: string[]; env?: Record<string, string> }
+  | { id: string; kind: 'http'; url: string; headers?: Record<string, string> }
+
+export const createMcpServer = (input: McpServerInput) =>
+  api.post<{ id: string; kind: 'stdio' | 'http' }>('/api/mcp/servers', input)
+export const deleteMcpServer = (id: string) =>
+  api.delete<{ deleted: boolean; id: string }>(`/api/mcp/servers/${encodeURIComponent(id)}`)
+
 /* ===== Confluence ===== */
 
 export interface ConfluenceHit { id: string; title: string; snippet?: string; url?: string }

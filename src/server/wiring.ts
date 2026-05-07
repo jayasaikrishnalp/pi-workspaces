@@ -16,6 +16,7 @@ import fsSync from 'node:fs'
 
 import { McpBroker } from './mcp-broker.js'
 import { loadSeedConfig } from './mcp-config.js'
+import { loadOverlay as loadMcpOverlay } from './mcp-overlay.js'
 import { openDb, upsertKbFts, deleteKbFts, type Db } from './db.js'
 import { installPersister } from './chat-persister.js'
 import { WikiStore } from './wiki-store.js'
@@ -185,7 +186,15 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   const bashPath = process.env.PI_WORKSPACE_BASH_PATH ?? '/bin/bash'
   const spawnBash: SpawnPi = (args, opts) => spawn(bashPath, [...args], opts ?? {})
 
-  const mcpBroker = new McpBroker(loadSeedConfig(process.env, secretStore))
+  // MCP catalog = seed (built-in) + overlay (user-added via UI). Overlay
+  // entries persist at <workspaceRoot>/mcp-servers.json; if the file is
+  // missing or malformed, we boot with seed-only.
+  const seedConfig = loadSeedConfig(process.env, secretStore)
+  const overlayConfig = loadMcpOverlay(root)
+  // De-dup: seed wins on id collision (the user can't shadow a built-in).
+  const seedIds = new Set(seedConfig.map((c) => c.id))
+  const mcpConfigs = [...seedConfig, ...overlayConfig.filter((c) => !seedIds.has(c.id))]
+  const mcpBroker = new McpBroker(mcpConfigs)
   const db = openDb(path.join(root, 'data.sqlite'))
 
   // Mirror chat-event-bus events into chat_messages so the dashboard

@@ -133,6 +133,32 @@ export class McpBroker {
     }
   }
 
+  /** Add a new server entry at runtime. Caller is responsible for
+   *  persistence (e.g. mcp-overlay.ts). The server is registered as
+   *  disconnected; the next listTools / callTool will trigger lazy-connect. */
+  addServer(cfg: McpServerConfig): void {
+    if (this.servers.has(cfg.id)) {
+      throw new McpError('INVALID_ARGS', `mcp server ${cfg.id} already exists`)
+    }
+    this.servers.set(cfg.id, {
+      config: cfg,
+      client: null,
+      status: 'disconnected',
+      toolCache: null,
+      connectingPromise: null,
+    })
+  }
+
+  /** Remove a server entry at runtime. Shuts down its client if connected.
+   *  Caller handles persistence. Returns false if the id was unknown. */
+  async removeServer(id: string): Promise<boolean> {
+    const e = this.servers.get(id)
+    if (!e) return false
+    this.servers.delete(id)
+    if (e.client) await e.client.shutdown().catch(() => {})
+    return true
+  }
+
   async shutdownAll(): Promise<void> {
     const tasks: Array<Promise<void>> = []
     for (const e of this.servers.values()) {
