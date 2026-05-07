@@ -159,7 +159,14 @@ export class WorkflowRunner {
     if (active) throw new RunnerError('ACTIVE_RUN', `workflow ${workflow} already running (run=${active.id})`, { activeRunId: active.id })
 
     const runId = randomUUID()
-    this.deps.store.createRun({ id: runId, workflow, triggeredBy: opts.triggeredBy ?? null, steps })
+    // Legacy v1 path: synthesize minimal AgentStepInput shape so the v2 store
+    // accepts our skill/workflow refs. Commit 2 replaces this runner with the
+    // agent-driven version; this is just a transient adapter to keep tsc green.
+    this.deps.store.createRun({
+      id: runId, workflow, workflowName: workflow,
+      triggeredBy: opts.triggeredBy ?? null,
+      steps: steps.map((s, i) => ({ id: `step-${i + 1}`, agentId: `${s.kind}:${s.ref}` })),
+    })
     const bus = this.deps.bus.getOrCreate(runId)
 
     // Kick off execution; never await — the route returns immediately.
