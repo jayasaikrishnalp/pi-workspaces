@@ -47,6 +47,10 @@ export interface WorkflowStep {
   next?: string
   /** Decision branches keyed by agent-emitted decision string. */
   branches?: Record<string, string>
+  /** Free-form canvas position for the React Flow renderer. Optional —
+   *  when absent, the canvas auto-lays out the step on a column grid and
+   *  the user can drag from there. */
+  position?: { x: number; y: number }
 }
 
 /**
@@ -81,6 +85,9 @@ export interface Workflow {
   /** Pin-to-pin wiring graph. When present, the runner can resolve typed
    *  values per step instead of relying on free-text prevOutput. */
   bindings?: Edge[]
+  /** Canvas-level layout: positions of the synthetic START / END nodes.
+   *  Steps store their own position in WorkflowStep.position. */
+  layout?: { start?: { x: number; y: number }; end?: { x: number; y: number } }
 }
 
 export const DEFAULT_WORKFLOWS: Workflow[] = [
@@ -239,6 +246,7 @@ interface YamlFlowStep {
   note?: string
   next?: string
   branches?: Record<string, string>
+  position?: { x: number; y: number }
 }
 
 interface YamlBinding {
@@ -256,6 +264,7 @@ interface YamlWorkflow {
   agents?: YamlAgent[]
   flow: YamlFlowStep[]
   bindings?: YamlBinding[]
+  layout?: { start?: { x: number; y: number }; end?: { x: number; y: number } }
 }
 
 function bindingToString(b: Binding): string {
@@ -300,11 +309,13 @@ export function workflowToYaml(workflow: Workflow, roster: Agent[]): string {
       if (s.note) out.note = s.note
       if (s.next) out.next = s.next
       if (s.branches && Object.keys(s.branches).length > 0) out.branches = s.branches
+      if (s.position) out.position = s.position
       return out
     }),
     ...(workflow.bindings && workflow.bindings.length > 0 ? {
       bindings: workflow.bindings.map((b) => ({ to: b.to, from: bindingToString(b.from) })),
     } : {}),
+    ...(workflow.layout ? { layout: workflow.layout } : {}),
   }
   return yamlStringify(yaml, { lineWidth: 100, blockQuote: 'literal' })
 }
@@ -392,6 +403,10 @@ export function parseWorkflowYaml(
       }
       if (Object.keys(branches).length > 0) out.branches = branches
     }
+    if (s.position && typeof s.position === 'object') {
+      const p = s.position as { x?: unknown; y?: unknown }
+      if (typeof p.x === 'number' && typeof p.y === 'number') out.position = { x: p.x, y: p.y }
+    }
     return out
   })
 
@@ -406,6 +421,22 @@ export function parseWorkflowYaml(
   const wfOutputs = parseFields(obj.outputs)
   if (wfInputs) workflow.inputs = wfInputs
   if (wfOutputs) workflow.outputs = wfOutputs
+
+  if (obj.layout && typeof obj.layout === 'object') {
+    const lay = obj.layout as Record<string, unknown>
+    const parsePoint = (raw: unknown): { x: number; y: number } | undefined => {
+      if (!raw || typeof raw !== 'object') return undefined
+      const p = raw as { x?: unknown; y?: unknown }
+      if (typeof p.x === 'number' && typeof p.y === 'number') return { x: p.x, y: p.y }
+      return undefined
+    }
+    const layout: Workflow['layout'] = {}
+    const start = parsePoint(lay.start)
+    const end = parsePoint(lay.end)
+    if (start) layout.start = start
+    if (end) layout.end = end
+    if (layout.start || layout.end) workflow.layout = layout
+  }
 
   // Bindings (typed pin-to-pin map). YAML form is { to, from } where `from`
   // is a dotted string ("workflow.<field>" | "<stepId>.<field>").

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Icons } from '../icons/Icons'
 import {
@@ -10,7 +10,8 @@ import { loadAgents, saveAgents, AGENT_KIND_META, type Agent } from '../../lib/a
 import { createSkill, getKbGraph, getKbSkill, updateSkill } from '../../lib/api'
 import { workflowSkillName, workflowSkillDescription, workflowToSkillMd } from '../../lib/workflow-to-skill'
 import { useWorkflowRun } from '../../hooks/useWorkflowRun'
-import { WorkflowCanvas } from './workflows/WorkflowCanvas'
+import { FlowCanvas } from './workflows/FlowCanvas'
+import { WorkflowSidePanel } from './workflows/WorkflowSidePanel'
 
 function iconFor(name: string) {
   const all = Icons as unknown as Record<string, (p: { size?: number }) => JSX.Element>
@@ -31,6 +32,7 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
   const [yamlError, setYamlError] = useState<string | null>(null)
   const [reconcileMsg, setReconcileMsg] = useState<string | null>(null)
   const [knownSkills, setKnownSkills] = useState<Set<string>>(new Set())
+  const [openStepId, setOpenStepId] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Persist on every change.
@@ -205,59 +207,104 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
     } finally { setSavingSkill(false) }
   }
 
+  // Selected step lives independently from the open side panel — opening
+  // the side panel selects, closing only deselects when the user explicitly
+  // closes (so a re-render doesn't bounce the panel).
+  const updateStep = (stepId: string, patch: Partial<WorkflowStep>) => {
+    if (!active) return
+    updateActive({
+      steps: active.steps.map((s) => (s.id === stepId ? { ...s, ...patch } : s)),
+    })
+  }
+  const deleteStep = (stepId: string) => {
+    if (!active) return
+    const remaining = active.steps.filter((s) => s.id !== stepId)
+    // Repoint any branches/next that targeted the removed step → 'end'.
+    const cleaned = remaining.map((s) => {
+      const ns: WorkflowStep = { ...s }
+      if (ns.next === stepId) ns.next = 'end'
+      if (ns.branches) {
+        const nb: Record<string, string> = {}
+        for (const [k, v] of Object.entries(ns.branches)) nb[k] = v === stepId ? 'end' : v
+        ns.branches = nb
+      }
+      return ns
+    })
+    updateActive({ steps: cleaned })
+    if (openStepId === stepId) setOpenStepId(null)
+  }
+  const openAgent = useMemo(() => {
+    if (!active || !openStepId) return undefined
+    const step = active.steps.find((s) => s.id === openStepId)
+    if (!step) return undefined
+    return agents.find((a) => a.id === step.agentId)
+  }, [active, openStepId, agents])
+
+  const runStatus = runState.status
+  const statusClass =
+    runStatus === 'running' || runStatus === 'queued' ? 'is-running'
+    : runStatus === 'completed' ? 'is-completed'
+    : runStatus === 'failed' ? 'is-failed'
+    : ''
+
   return (
     <div className="page-root workflows-screen" data-testid="workflows" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <div className="page-header" style={{ display: 'flex', gap: 8, padding: '12px 16px', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
-        <Icons.conductor size={18} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600 }}>Workflow</div>
-          <div className="kb-meta" style={{ fontSize: 11 }}>YAML-defined pipelines · upload to import &amp; auto-scaffold missing agents/skills</div>
+      <header className="wf-screen-header">
+        <span className="wf-header-icon"><Icons.conductor size={18} /></span>
+        <div className="wf-header-titles">
+          <div className="wf-header-title">Workflow</div>
+          <div className="wf-header-sub">
+            Compose agents into a typed pipeline. Pin-to-pin contracts, draggable nodes, end-to-end I/O.
+          </div>
         </div>
-        <input ref={fileRef} type="file" accept=".yaml,.yml,application/yaml,text/yaml" style={{ display: 'none' }} onChange={onUploadFile} data-testid="workflows-upload-input" />
-        <button className="btn btn-ghost small" onClick={() => fileRef.current?.click()} data-testid="workflows-upload">Upload .yaml</button>
-        <button className="btn btn-ghost small" disabled={!active} onClick={exportYaml} data-testid="workflows-export">Export .yaml</button>
-        <button
-          className="btn btn-ghost small"
-          disabled={!active || savingSkill || (active?.steps.length ?? 0) === 0}
-          onClick={() => { void saveAsSkill() }}
-          data-testid="workflows-save-as-skill"
-          title="Persist this workflow as a SKILL.md so pi can invoke it. Updates if a skill with the same name already exists."
-        >{savingSkill ? 'saving…' : 'Save as Skill'}</button>
-        <button className="btn btn-accent small" onClick={createNew} data-testid="workflows-new">+ New workflow</button>
-      </div>
+        <div className="wf-header-actions">
+          <input ref={fileRef} type="file" accept=".yaml,.yml,application/yaml,text/yaml" style={{ display: 'none' }} onChange={onUploadFile} data-testid="workflows-upload-input" />
+          <button className="wf-action-btn" onClick={() => fileRef.current?.click()} data-testid="workflows-upload">
+            <Icons.tasks size={14} />Upload
+          </button>
+          <button className="wf-action-btn" disabled={!active} onClick={exportYaml} data-testid="workflows-export">
+            <Icons.files size={14} />Export
+          </button>
+          <button
+            className="wf-action-btn"
+            disabled={!active || savingSkill || (active?.steps.length ?? 0) === 0}
+            onClick={() => { void saveAsSkill() }}
+            data-testid="workflows-save-as-skill"
+            title="Persist this workflow as a SKILL.md so pi can invoke it."
+          >{savingSkill ? 'saving…' : 'Save as Skill'}</button>
+          <button className="wf-action-btn wf-action-primary" onClick={createNew} data-testid="workflows-new">
+            + New workflow
+          </button>
+        </div>
+      </header>
 
       {reconcileMsg ? (
-        <div className="banner" data-testid="workflows-reconcile-msg" style={{ padding: '6px 16px', background: 'rgba(29,172,254,0.08)', fontSize: 12 }}>
+        <div className="banner" data-testid="workflows-reconcile-msg" style={{ padding: '6px 20px', background: 'rgba(29,172,254,0.08)', fontSize: 12 }}>
           {reconcileMsg}
         </div>
       ) : null}
 
-      <div className="wf-stage" style={{ display: 'grid', gridTemplateColumns: '240px 1fr 260px', gap: 0, flex: 1, minHeight: 0 }}>
+      <div className={`wf-stage-grid ${openStepId ? 'has-side-panel' : ''}`}>
         {/* LEFT — workflow list */}
-        <aside className="wf-list" style={{ borderRight: '1px solid var(--border)', overflow: 'auto', padding: 8 }}>
-          <div className="kk-label-tiny" style={{ padding: '4px 6px' }}>workflows · {workflows.length}</div>
+        <aside className="wf-list-panel">
+          <div className="wf-list-label">workflows · {workflows.length}</div>
           {workflows.length === 0 ? (
             <div className="dash-empty" style={{ padding: 12 }}>No workflows. Click "+ New workflow" or upload a .yaml.</div>
           ) : null}
           {workflows.map((w) => (
             <div
               key={w.id}
-              className={`wf-list-row ${activeId === w.id ? 'active' : ''}`}
-              onClick={() => setActiveId(w.id)}
+              className={`wf-list-row ${activeId === w.id ? 'is-active' : ''}`}
+              onClick={() => { setActiveId(w.id); setOpenStepId(null) }}
               data-testid={`wf-list-${w.id}`}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px',
-                borderRadius: 4, cursor: 'pointer',
-                background: activeId === w.id ? 'rgba(29,172,254,0.08)' : 'transparent',
-              }}
             >
-              <Icons.conductor size={14} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="mono" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
-                <div className="mono" style={{ fontSize: 10, opacity: 0.5 }}>{w.steps.length} steps</div>
+              <span className="wf-list-icon"><Icons.conductor size={13} /></span>
+              <div className="wf-list-titles">
+                <div className="wf-list-name">{w.name}</div>
+                <div className="wf-list-meta">{w.steps.length} steps</div>
               </div>
               <button
-                className="btn btn-ghost small"
+                className="wf-list-delete"
                 onClick={(e) => { e.stopPropagation(); removeWorkflow(w.id) }}
                 data-testid={`wf-delete-${w.id}`}
                 title="Delete workflow"
@@ -268,54 +315,50 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
 
         {/* CENTER — header + canvas (or YAML editor) */}
         {active ? (
-          <div className="wf-composer" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, padding: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+          <div className="wf-canvas-wrap">
+            <div className="wf-canvas-header">
               <input
-                className="input mono"
+                className="wf-canvas-title-input"
                 value={active.name}
                 onChange={(e) => updateActive({ name: e.target.value })}
                 placeholder="Workflow name"
                 data-testid="wf-name-input"
-                style={{ fontSize: 16, fontWeight: 600 }}
               />
-              <div style={{ display: 'flex', gap: 8, fontSize: 11, opacity: 0.6, alignItems: 'center' }}>
-                <span className="kk-label-tiny">id</span>
-                <span className="mono">{active.id}</span>
-                <span>·</span>
-                <span className="mono">{active.steps.length} steps</span>
-                <span>·</span>
-                <span className="mono" data-testid="wf-run-status">{runState.status}</span>
-                {runState.runId ? <span className="mono" style={{ opacity: 0.5 }}>run {runState.runId.slice(0, 8)}</span> : null}
-                <span style={{ flex: 1 }} />
-                {runState.status === 'running' || runState.status === 'queued' ? (
-                  <button
-                    className="btn btn-ghost small"
-                    onClick={() => { void cancel() }}
-                    data-testid="wf-cancel"
-                  >Cancel</button>
-                ) : (
-                  <button
-                    className="btn btn-accent small"
-                    disabled={starting || active.steps.length === 0}
-                    onClick={() => { void run() }}
-                    data-testid="wf-run"
-                  >▸ Run</button>
-                )}
-                <button
-                  className="btn btn-ghost small"
-                  onClick={() => { setShowYaml((s) => !s); setYamlError(null) }}
-                  data-testid="wf-toggle-yaml"
-                >{showYaml ? 'Hide' : 'Edit'} YAML</button>
-              </div>
               <textarea
-                className="input mono"
+                className="wf-canvas-task"
                 rows={2}
                 value={active.task}
                 onChange={(e) => updateActive({ task: e.target.value })}
                 placeholder="Describe the task this workflow accomplishes…"
                 data-testid="wf-task-input"
               />
-              {startError ? <div className="chat-msg-error" data-testid="wf-start-error">{startError}</div> : null}
+              <div className="wf-canvas-meta">
+                <span className="wf-meta-pill">{active.steps.length} nodes</span>
+                <span className="wf-meta-pill">{(active.bindings?.length ?? 0)} bindings</span>
+                <span className={`wf-meta-pill ${statusClass}`} data-testid="wf-run-status">{runStatus}</span>
+                {runState.runId ? <span className="wf-meta-pill" style={{ opacity: 0.6 }}>run {runState.runId.slice(0, 8)}</span> : null}
+                <span className="wf-canvas-meta-spacer" />
+                <button
+                  className="wf-action-btn"
+                  onClick={() => { setShowYaml((s) => !s); setYamlError(null) }}
+                  data-testid="wf-toggle-yaml"
+                >{showYaml ? 'Hide YAML' : 'Edit YAML'}</button>
+                {runState.status === 'running' || runState.status === 'queued' ? (
+                  <button
+                    className="wf-action-btn"
+                    onClick={() => { void cancel() }}
+                    data-testid="wf-cancel"
+                  >Cancel</button>
+                ) : (
+                  <button
+                    className="wf-action-btn wf-action-primary"
+                    disabled={starting || active.steps.length === 0}
+                    onClick={() => { void run() }}
+                    data-testid="wf-run"
+                  >▸ Run</button>
+                )}
+              </div>
+              {startError ? <div className="chat-msg-error" data-testid="wf-start-error" style={{ marginTop: 8 }}>{startError}</div> : null}
             </div>
 
             {showYaml ? (
@@ -330,20 +373,25 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
                 />
                 {yamlError ? <div className="chat-msg-error" data-testid="wf-yaml-error">{yamlError}</div> : null}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button className="btn btn-accent small" onClick={() => { void applyYamlDraft() }} data-testid="wf-yaml-apply">Apply YAML</button>
+                  <button className="wf-action-btn wf-action-primary" onClick={() => { void applyYamlDraft() }} data-testid="wf-yaml-apply">Apply YAML</button>
                   <button
-                    className="btn btn-ghost small"
+                    className="wf-action-btn"
                     onClick={() => { if (active) setYamlDraft(workflowToYaml(active, agents)) }}
                   >Reset</button>
                 </div>
               </div>
             ) : (
-              <div style={{ flex: 1, minHeight: 0 }}>
-                <WorkflowCanvas
+              <div className="wf-canvas-flex">
+                <FlowCanvas
                   workflow={active}
                   agents={agents}
                   runState={runState}
-                  onCancel={cancel}
+                  onWorkflowChange={(next) => updateActive({
+                    steps: next.steps,
+                    layout: next.layout,
+                  })}
+                  onOpenStep={(id) => setOpenStepId(id === openStepId ? null : id)}
+                  selectedStepId={openStepId}
                 />
               </div>
             )}
@@ -354,39 +402,57 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
           </div>
         )}
 
-        {/* RIGHT — agent palette */}
-        <aside style={{ borderLeft: '1px solid var(--border)', overflow: 'auto', padding: 8 }}>
-          <div className="kk-label-tiny" style={{ padding: '4px 6px' }}>attach agent</div>
-          {agents.length === 0 ? (
-            <div className="dash-empty" style={{ padding: 12, fontSize: 11 }}>No agents in roster. Add some on the Agents screen.</div>
-          ) : null}
-          {agents.map((a) => {
-            const meta = AGENT_KIND_META[a.kind]
-            const Icon = iconFor(meta.icon)
-            return (
-              <button
-                key={a.id}
-                className="btn btn-ghost"
-                onClick={() => addStep(a.id)}
-                disabled={!active}
-                data-testid={`wf-palette-${a.id}`}
-                title={active ? `Append ${a.name}` : 'Select a workflow first'}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: 8,
-                  marginBottom: 4, background: meta.bg, borderLeft: `2px solid ${meta.color}`,
-                  textAlign: 'left',
-                }}
-              >
-                <Icon size={14} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="mono" style={{ fontSize: 12 }}>{a.name}</div>
-                  <div className="mono" style={{ fontSize: 10, opacity: 0.5 }}>{a.kind} · {a.skills.length} skills</div>
-                </div>
-                +
-              </button>
-            )
-          })}
-        </aside>
+        {/* RIGHT — side panel when open, palette otherwise */}
+        {openStepId && active ? (
+          <WorkflowSidePanel
+            workflow={active}
+            stepId={openStepId}
+            agent={openAgent}
+            cardState={runState.cards[openStepId]}
+            onClose={() => setOpenStepId(null)}
+            onUpdateStep={(patch) => updateStep(openStepId, patch)}
+            onDeleteStep={() => deleteStep(openStepId)}
+          />
+        ) : (
+          <aside className="wf-palette">
+            <div className="wf-palette-head">
+              <span className="wf-palette-label">Attach Agent</span>
+              <button className="wf-palette-manage">⚙ Manage</button>
+            </div>
+            <div className="wf-palette-hint">
+              Click a node on the canvas to inspect its contract. Or use the <strong>+</strong> handle on the last node to append a new step.
+            </div>
+            {agents.length === 0 ? (
+              <div className="dash-empty" style={{ padding: 12, fontSize: 11 }}>No agents in roster. Add some on the Agents screen.</div>
+            ) : null}
+            {agents.map((a) => {
+              const meta = AGENT_KIND_META[a.kind]
+              const Icon = iconFor(meta.icon)
+              const ins = a.inputs?.length ?? 0
+              const outs = a.outputs?.length ?? 0
+              return (
+                <button
+                  key={a.id}
+                  className="wf-palette-row"
+                  onClick={() => addStep(a.id)}
+                  disabled={!active}
+                  data-testid={`wf-palette-${a.id}`}
+                  title={active ? `Append ${a.name}` : 'Select a workflow first'}
+                  style={{ borderLeftColor: meta.color, background: meta.bg }}
+                >
+                  <span className="wf-palette-icon" style={{ background: 'rgba(0,0,0,0.25)', color: meta.color }}>
+                    <Icon size={14} />
+                  </span>
+                  <div className="wf-palette-titles">
+                    <div className="wf-palette-name">{a.name}</div>
+                    <div className="wf-palette-meta">{ins} in · {outs} out · {a.kind}</div>
+                  </div>
+                  <span className="wf-palette-add">+</span>
+                </button>
+              )
+            })}
+          </aside>
+        )}
       </div>
     </div>
   )
