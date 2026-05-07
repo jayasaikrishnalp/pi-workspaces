@@ -468,6 +468,22 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
                     const next = { ...(inputDrafts[active.id] ?? {}), [name]: value }
                     setInputDrafts((d) => ({ ...d, [active.id]: next }))
                   }}
+                  onAddInput={() => {
+                    // Append a new input. Pick a free-form text textarea by
+                    // default (matches the L1 free-form lookup pattern).
+                    // Auto-name to avoid collisions: prompt, prompt_2, …
+                    const existing = active.inputs ?? []
+                    const taken = new Set(existing.map((i) => i.name))
+                    let name = 'prompt'
+                    let n = 2
+                    while (taken.has(name)) { name = `prompt_${n++}` }
+                    updateActive({
+                      inputs: [
+                        ...existing,
+                        { name, type: 'text', required: true, desc: 'Free-form prompt — describe what the workflow should do' },
+                      ],
+                    })
+                  }}
                 />
               </div>
             )}

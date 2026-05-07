@@ -261,6 +261,32 @@
   color: rgba(255,255,255,0.35);
   font-size: 10.5px;
   font-style: italic;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.fc-fields-empty-text { color: inherit; }
+.fc-fields-add-btn {
+  font: inherit;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+  padding: 4px 10px;
+  background: rgba(29,172,254,0.10);
+  border: 1px dashed rgba(29,172,254,0.45);
+  border-radius: 5px;
+  color: var(--accent, #1dacfe);
+  cursor: pointer;
+  transition: background 100ms, border-color 100ms;
+}
+.fc-fields-add-btn:hover {
+  background: rgba(29,172,254,0.18);
+  border-color: var(--accent, #1dacfe);
+}
+.fc-fields-add-btn--inline {
+  margin: 4px 14px 10px;
+  align-self: flex-start;
 }
 
 .fc-field {

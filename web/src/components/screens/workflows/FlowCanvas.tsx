@@ -60,6 +60,10 @@ interface Props {
   inputValues?: Record<string, string>
   /** Called when the user types into the inline editor on the START node. */
   onInputChange?: (name: string, value: string) => void
+  /** Called when the user clicks "+ Add input" on the START node. The
+   *  parent decides what default to insert (typically a free-form
+   *  `prompt` field of type `text`). */
+  onAddInput?: () => void
 }
 
 type StartNodeData = {
@@ -70,6 +74,9 @@ type StartNodeData = {
   isLast: boolean
   values: Record<string, string>
   onValueChange?: (name: string, value: string) => void
+  /** Append a new workflow input. Used when the workflow declared none
+   *  and the user wants to add a free-form prompt textarea on the fly. */
+  onAddInput?: () => void
 }
 type EndNodeData = {
   kind: 'workflowOutput'
@@ -101,7 +108,7 @@ function iconFor(name: string) {
 /* ===== Node renderers ===== */
 
 function StartNode({ data }: NodeProps<RFNode<StartNodeData, 'workflowInput'>>): JSX.Element {
-  const { inputs, status, onAddNext, isLast, values, onValueChange } = data
+  const { inputs, status, onAddNext, isLast, values, onValueChange, onAddInput } = data
   const running = status === 'running'
   const done = status === 'completed'
   return (
@@ -152,8 +159,28 @@ function StartNode({ data }: NodeProps<RFNode<StartNodeData, 'workflowInput'>>):
           })}
         </div>
       ) : (
-        <div className="fc-fields fc-fields--empty">no external inputs declared</div>
+        <div className="fc-fields fc-fields--empty">
+          <div className="fc-fields-empty-text">no external inputs declared</div>
+          {onAddInput ? (
+            <button
+              type="button"
+              className="fc-fields-add-btn nodrag"
+              onClick={(e) => { e.stopPropagation(); onAddInput() }}
+              onMouseDown={(e) => e.stopPropagation()}
+              title="Add a free-form prompt textarea as a workflow input"
+            >+ Add input</button>
+          ) : null}
+        </div>
       )}
+      {/* When inputs already exist, expose an `+ Add another` link. */}
+      {inputs.length > 0 && onAddInput ? (
+        <button
+          type="button"
+          className="fc-fields-add-btn fc-fields-add-btn--inline nodrag"
+          onClick={(e) => { e.stopPropagation(); onAddInput() }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >+ Add another input</button>
+      ) : null}
 
       {/* "+" affordance — only on the last node so adds always append. */}
       {isLast ? (
@@ -353,6 +380,7 @@ function buildElements(
   onAddNext: (predecessorId: string, anchor: HTMLElement | null) => void,
   inputValues: Record<string, string>,
   onInputChange?: (name: string, value: string) => void,
+  onAddInput?: () => void,
 ): { nodes: FlowNode[]; edges: RFEdge[] } {
   const agentMap = new Map(agents.map((a) => [a.id, a]))
   const positions = seededPositions(workflow)
@@ -371,6 +399,7 @@ function buildElements(
       isLast: workflow.steps.length === 0,
       values: inputValues,
       onValueChange: onInputChange,
+      onAddInput,
     },
     draggable: true,
   } as FlowNode)
@@ -542,7 +571,7 @@ function AddPopover({
 
 function InnerCanvas({
   workflow, agents, runState, onWorkflowChange, onOpenStep, selectedStepId,
-  inputValues, onInputChange,
+  inputValues, onInputChange, onAddInput,
 }: Props): JSX.Element {
   const rf = useReactFlow()
   const [popover, setPopover] = useState<AddPopoverState | null>(null)
@@ -555,8 +584,8 @@ function InnerCanvas({
 
   const safeValues = inputValues ?? {}
   const { nodes, edges } = useMemo(
-    () => buildElements(workflow, agents, runState, selectedStepId, onOpenStep, onAddNext, safeValues, onInputChange),
-    [workflow, agents, runState, selectedStepId, onOpenStep, onAddNext, safeValues, onInputChange],
+    () => buildElements(workflow, agents, runState, selectedStepId, onOpenStep, onAddNext, safeValues, onInputChange, onAddInput),
+    [workflow, agents, runState, selectedStepId, onOpenStep, onAddNext, safeValues, onInputChange, onAddInput],
   )
 
   // Mutable copy so React Flow can drag without going through the store on every frame.
