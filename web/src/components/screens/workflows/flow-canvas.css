@@ -325,40 +325,149 @@
 .fc-field--out .fc-field-name { order: 2; }
 .fc-field--out .fc-field-type { order: 1; margin-right: auto; }
 
-/* ----- Editable inputs on the START node ----- */
-.fc-fields--editable { padding: 8px 14px 12px; gap: 10px; display: flex; flex-direction: column; }
-.fc-field--editor { display: flex; flex-direction: column; gap: 4px; padding: 0; }
-.fc-field--editor .fc-field-row {
-  display: flex;
+/* ----- Clickable input pills on the START node ----- */
+.fc-field--clickable {
+  display: grid;
+  grid-template-columns: minmax(64px, max-content) 1fr max-content;
   align-items: center;
   gap: 8px;
-}
-.fc-field--editor .fc-field-type { margin-left: auto; }
-.fc-field-input {
   width: 100%;
-  background: rgba(0,0,0,0.4);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 5px;
-  padding: 5px 8px;
+  background: rgba(0,0,0,0.32);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 100ms, background 100ms;
+}
+.fc-field--clickable:hover {
+  border-color: rgba(29,172,254,0.45);
+  background: rgba(29,172,254,0.05);
+}
+.fc-field--clickable.has-value {
+  border-color: rgba(29,172,254,0.32);
+  background: rgba(29,172,254,0.04);
+}
+.fc-field-preview {
   color: rgba(255,255,255,0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: -apple-system, system-ui, sans-serif;
   font-size: 11.5px;
-  line-height: 1.45;
+}
+.fc-field-placeholder {
+  color: rgba(255,255,255,0.32);
+  font-style: italic;
+  font-family: -apple-system, system-ui, sans-serif;
+}
+
+/* ----- Input edit popover ----- */
+.fc-input-popover {
+  position: fixed;
+  z-index: 1000;
+  background: rgba(20,22,28,0.98);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  box-shadow: 0 20px 48px rgba(0,0,0,0.5);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: var(--font-sans);
+  color: rgba(255,255,255,0.9);
+}
+.fc-input-popover-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fc-input-popover-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+.fc-input-popover-type {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(29,172,254,0.12);
+  color: var(--accent, #1dacfe);
+  border: 1px solid rgba(29,172,254,0.28);
+}
+.fc-input-popover-close {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.5);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.fc-input-popover-close:hover {
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.9);
+}
+.fc-input-popover-desc {
+  font-size: 11px;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.4;
+}
+.fc-input-popover-textarea,
+.fc-input-popover-input {
+  width: 100%;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: rgba(255,255,255,0.95);
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
   outline: none;
+  resize: vertical;
   box-sizing: border-box;
   transition: border-color 120ms, background 120ms;
 }
-.fc-field-input::placeholder { color: rgba(255,255,255,0.32); }
-.fc-field-input:focus {
+.fc-input-popover-textarea:focus,
+.fc-input-popover-input:focus {
   border-color: var(--accent, #1dacfe);
-  background: rgba(29,172,254,0.06);
+  background: rgba(29,172,254,0.05);
 }
-.fc-field-textarea {
-  resize: vertical;
-  min-height: 64px;
-  font-size: 11.5px;
-  white-space: pre-wrap;
+.fc-input-popover-textarea { min-height: 140px; }
+.fc-input-popover-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
+.fc-input-popover-hint {
+  font-size: 10.5px;
+  color: rgba(255,255,255,0.4);
+  font-family: var(--font-mono);
+}
+.fc-input-popover-done {
+  margin-left: auto;
+  padding: 5px 14px;
+  background: rgba(29,172,254,0.15);
+  border: 1px solid rgba(29,172,254,0.4);
+  border-radius: 5px;
+  color: var(--accent, #1dacfe);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 100ms;
+}
+.fc-input-popover-done:hover { background: rgba(29,172,254,0.25); }
 
 .fc-pin-dot {
   width: 8px;
@@ -411,8 +520,6 @@
 }
 
 /* ===== START / END nuances ===== */
-/* START node is wider — it hosts the live input editors. */
-.fc-node-start { min-width: 320px; max-width: 320px; }
 .fc-node-start {
   border-left: 3px solid var(--accent, #1dacfe);
 }
