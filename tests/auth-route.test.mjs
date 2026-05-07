@@ -207,3 +207,34 @@ test('GET /api/probe with cookie returns capability matrix', async () => {
     await ctx.stop()
   }
 })
+
+test('x-workspace-internal-token header bypasses cookie auth', async () => {
+  const { setInternalToken } = await import('../src/server/auth-middleware.ts')
+  const TOKEN = 'tk-' + 'a'.repeat(60)
+  setInternalToken(TOKEN)
+  try {
+    const ctx = await bootHttp({ devToken: 'TEST' })
+    try {
+      // No cookie, but with the internal token header → allowed.
+      const r = await fetch(`http://127.0.0.1:${ctx.port}/api/sessions`, {
+        headers: { 'x-workspace-internal-token': TOKEN },
+      })
+      assert.notEqual(r.status, 401, 'request with valid internal token must NOT 401')
+    } finally { await ctx.stop() }
+  } finally { setInternalToken(null) }
+})
+
+test('x-workspace-internal-token with wrong value still 401s', async () => {
+  const { setInternalToken } = await import('../src/server/auth-middleware.ts')
+  const TOKEN = 'tk-' + 'b'.repeat(60)
+  setInternalToken(TOKEN)
+  try {
+    const ctx = await bootHttp({ devToken: 'TEST' })
+    try {
+      const r = await fetch(`http://127.0.0.1:${ctx.port}/api/sessions`, {
+        headers: { 'x-workspace-internal-token': 'wrong-value' },
+      })
+      assert.equal(r.status, 401)
+    } finally { await ctx.stop() }
+  } finally { setInternalToken(null) }
+})

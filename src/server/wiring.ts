@@ -1,6 +1,7 @@
 import path from 'node:path'
 import os from 'node:os'
 import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 
 import { ChatEventBus, getChatEventBus } from './chat-event-bus.js'
 import { RunStore } from './run-store.js'
@@ -12,6 +13,7 @@ import { ConfluenceClient, ALLOWED_BASE_URL } from './confluence-client.js'
 import { buildSecretEnv } from './secret-store.js'
 import { AuthStore, getAuthStore } from './auth-store.js'
 import { SecretStore, getSecretStore } from './secret-store.js'
+import { setInternalToken } from './auth-middleware.js'
 import fsSync from 'node:fs'
 
 import { McpBroker } from './mcp-broker.js'
@@ -192,6 +194,15 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   // Important: load secrets synchronously BEFORE building the seed
   // catalog so atlassian / other secret-gated entries register on boot.
   secretStore.loadSync()
+
+  // Per-boot internal token. Children we spawn (pi, mcp-bridge) present this
+  // via x-workspace-internal-token to bypass the cookie-based auth so they
+  // can call /api/mcp/* without an interactive login. Rotates every restart.
+  // We also expose it as WORKSPACE_INTERNAL_TOKEN to children.
+  const internalToken = randomBytes(32).toString('hex')
+  setInternalToken(internalToken)
+  process.env.WORKSPACE_INTERNAL_TOKEN = internalToken
+
   const seedConfig = loadSeedConfig(process.env, secretStore)
   const overlayConfig = loadMcpOverlay(root)
   // De-dup: seed wins on id collision (the user can't shadow a built-in).

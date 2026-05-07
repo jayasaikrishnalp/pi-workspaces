@@ -33,6 +33,7 @@ interface QualifiedTool {
 }
 
 const PORT_FILE = path.join(os.homedir(), '.pi-workspace', 'server.port')
+const INTERNAL_TOKEN_HEADER = 'x-workspace-internal-token'
 
 function readPort(): number | null {
   try {
@@ -45,8 +46,16 @@ function readPort(): number | null {
   }
 }
 
+/** Workspace passes its per-boot internal token via env so the bridge can
+ *  bypass the cookie-based auth on /api/mcp/* without an interactive login. */
+function authHeaders(): Record<string, string> {
+  const tok = process.env.WORKSPACE_INTERNAL_TOKEN
+  if (!tok) return {}
+  return { [INTERNAL_TOKEN_HEADER]: tok }
+}
+
 async function fetchTools(baseUrl: string): Promise<QualifiedTool[]> {
-  const res = await fetch(`${baseUrl}/api/mcp/tools`)
+  const res = await fetch(`${baseUrl}/api/mcp/tools`, { headers: { ...authHeaders() } })
   if (!res.ok) throw new Error(`tools list returned ${res.status}`)
   const body = (await res.json()) as { tools?: QualifiedTool[] }
   return body.tools ?? []
@@ -55,7 +64,7 @@ async function fetchTools(baseUrl: string): Promise<QualifiedTool[]> {
 async function callTool(baseUrl: string, serverId: string, toolName: string, args: Record<string, unknown>): Promise<unknown> {
   const res = await fetch(`${baseUrl}/api/mcp/call`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ serverId, toolName, args }),
   })
   const payload = await res.json().catch(() => ({}))
