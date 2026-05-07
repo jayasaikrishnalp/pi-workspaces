@@ -24,7 +24,7 @@
  *   - "End flow"   → sets the predecessor's `next` to "end"
  */
 import {
-  Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow,
+  Background, BackgroundVariant, Controls, ReactFlow, ReactFlowProvider, useReactFlow,
   applyNodeChanges, type Edge as RFEdge, type EdgeProps, type Node as RFNode, type NodeChange,
   type NodeProps, BaseEdge, getBezierPath, EdgeLabelRenderer, Handle, Position,
 } from '@xyflow/react'
@@ -619,20 +619,6 @@ function InnerCanvas({
       >
         <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="rgba(255,255,255,0.08)" />
         <Controls position="bottom-right" showInteractive={false} />
-        <MiniMap
-          position="bottom-left"
-          pannable
-          zoomable
-          nodeColor={(n) => {
-            const data = (n as FlowNode).data
-            if (data.kind === 'workflowInput') return '#1dacfe'
-            if (data.kind === 'workflowOutput') return '#7ac88c'
-            const agent = (data as AgentNodeData).agent
-            return agent ? AGENT_KIND_META[agent.kind].color : '#666'
-          }}
-          maskColor="rgba(12,13,16,0.7)"
-          style={{ background: 'rgba(20,22,28,0.8)', width: 160, height: 100 }}
-        />
       </ReactFlow>
       {popover ? (
         <AddPopover

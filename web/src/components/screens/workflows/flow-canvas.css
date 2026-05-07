@@ -500,8 +500,9 @@
 .fc-sidepanel {
   display: flex;
   flex-direction: column;
-  width: 360px;
-  min-width: 360px;
+  width: 560px;
+  min-width: 560px;
+  max-width: 50vw;
   background: rgba(15, 17, 22, 0.97);
   border-left: 1px solid var(--border, #3d3d3d);
   box-shadow: -16px 0 36px rgba(0,0,0,0.4);
@@ -1124,4 +1125,205 @@
   color: rgba(255, 255, 255, 0.4);
   line-height: 1.4;
 }
+
+/* ===== Side panel — status pill, tabs, filter, Railway-style log table ===== */
+
+.fc-sidepanel-status {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid transparent;
+  vertical-align: 2px;
+}
+.fc-sidepanel-status-idle {
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.5);
+  border-color: rgba(255,255,255,0.08);
+}
+.fc-sidepanel-status-queued {
+  background: rgba(122,140,200,0.08);
+  color: rgba(170,185,235,0.85);
+  border-color: rgba(122,140,200,0.25);
+}
+.fc-sidepanel-status-running {
+  background: rgba(29,172,254,0.12);
+  color: #1dacfe;
+  border-color: rgba(29,172,254,0.4);
+  animation: fc-status-pulse 1.4s ease-in-out infinite;
+}
+.fc-sidepanel-status-completed {
+  background: rgba(122,200,140,0.12);
+  color: #7ac88c;
+  border-color: rgba(122,200,140,0.4);
+}
+.fc-sidepanel-status-failed {
+  background: rgba(238,108,108,0.12);
+  color: #ee6c6c;
+  border-color: rgba(238,108,108,0.4);
+}
+@keyframes fc-status-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+.fc-sidepanel-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border, #3d3d3d);
+  background: rgba(0, 0, 0, 0.18);
+  flex-shrink: 0;
+}
+.fc-sidepanel-tab {
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba(255,255,255,0.55);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 80ms, border-color 80ms;
+}
+.fc-sidepanel-tab:hover { color: rgba(255,255,255,0.85); }
+.fc-sidepanel-tab.is-active {
+  color: var(--accent, #1dacfe);
+  border-bottom-color: var(--accent, #1dacfe);
+}
+.fc-sidepanel-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 0 5px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.7);
+  font-size: 10px;
+  font-weight: 600;
+}
+.fc-sidepanel-tab.is-active .fc-sidepanel-tab-count {
+  background: rgba(29,172,254,0.18);
+  color: #1dacfe;
+}
+.fc-sidepanel-filter {
+  margin-left: auto;
+  flex: 0 0 220px;
+  height: 26px;
+  padding: 0 10px;
+  background: rgba(0,0,0,0.32);
+  border: 1px solid var(--border, #3d3d3d);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.85);
+  font: inherit;
+  font-size: 11.5px;
+}
+.fc-sidepanel-filter::placeholder { color: rgba(255,255,255,0.35); }
+.fc-sidepanel-filter:focus {
+  outline: none;
+  border-color: var(--accent, #1dacfe);
+  background: rgba(0,0,0,0.45);
+}
+
+/* ----- Log table ----- */
+.fc-sidepanel-logs { font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, "Cascadia Code", Consolas, monospace; }
+.fc-sidepanel-logs-empty {
+  padding: 36px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  font-style: italic;
+}
+.fc-sidepanel-logtable {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.25);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.fc-sidepanel-logtable-head {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: rgba(255,255,255,0.5);
+  font-family: -apple-system, system-ui, sans-serif;
+  font-weight: 600;
+}
+.fc-sidepanel-logrow {
+  display: grid;
+  grid-template-columns: 130px 56px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 12px;
+  border-left: 2px solid rgba(29,172,254,0.35);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  color: rgba(255,255,255,0.85);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.fc-sidepanel-logrow:last-child { border-bottom: none; }
+.fc-sidepanel-logrow:hover { background: rgba(255,255,255,0.025); }
+.fc-sidepanel-logrow-date {
+  color: rgba(255,255,255,0.45);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.fc-sidepanel-logrow-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  font-family: -apple-system, system-ui, sans-serif;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.65);
+  white-space: nowrap;
+}
+.fc-sidepanel-logrow-text {
+  color: rgba(255,255,255,0.92);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Per-tag accenting — left rule + tag chip */
+.fc-sidepanel-logrow-out  { border-left-color: rgba(29,172,254,0.35); }
+.fc-sidepanel-logrow-out  .fc-sidepanel-logrow-tag-out  { background: rgba(29,172,254,0.12); color: #1dacfe; }
+.fc-sidepanel-logrow-step { border-left-color: rgba(168,140,232,0.55); }
+.fc-sidepanel-logrow-step .fc-sidepanel-logrow-tag-step { background: rgba(168,140,232,0.18); color: #c4abfa; }
+.fc-sidepanel-logrow-end  { border-left-color: rgba(122,200,140,0.55); }
+.fc-sidepanel-logrow-end  .fc-sidepanel-logrow-tag-end  { background: rgba(122,200,140,0.18); color: #7ac88c; }
+.fc-sidepanel-logrow-err  { border-left-color: rgba(238,108,108,0.7); background: rgba(238,108,108,0.05); }
+.fc-sidepanel-logrow-err  .fc-sidepanel-logrow-tag-err  { background: rgba(238,108,108,0.2); color: #ee6c6c; }
+.fc-sidepanel-logrow-err  .fc-sidepanel-logrow-text     { color: #f5b3b3; }
+.fc-sidepanel-logrow-run  { border-left-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.03); }
+.fc-sidepanel-logrow-run  .fc-sidepanel-logrow-tag-run  { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.65); }
+.fc-sidepanel-logrow-tool { border-left-color: rgba(232,180,100,0.5); }
+.fc-sidepanel-logrow-tool .fc-sidepanel-logrow-tag-tool { background: rgba(232,180,100,0.18); color: #f0c576; }
+
 
