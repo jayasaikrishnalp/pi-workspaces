@@ -12,18 +12,46 @@
     var(--bg, #0c0d10);
 }
 
+/* Inner wrapper sizes to the natural grid content. The SVG overlay below
+   uses inset:0 against THIS, not the scroll-port, so edges span the full
+   content even when the user scrolls horizontally. */
+.wf-canvas-inner {
+  position: relative;
+  display: inline-block;
+  min-width: 100%;
+  min-height: 100%;
+}
+
 .wf-canvas-grid {
   position: relative;
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 240px;
   align-items: start;
   gap: 80px 100px;
   padding: 40px 60px;
   z-index: 2;
-  min-width: max-content;
-  min-height: 100%;
 }
+
+/* START / END terminals — small chevron pills before/after the flow. */
+.wf-terminal {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  width: 80px; height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border, rgba(255,255,255,0.18));
+  background: rgba(20, 22, 28, 0.85);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.65);
+  justify-self: center;
+  align-self: center;
+}
+.wf-terminal-start { border-left: 3px solid var(--accent, #1dacfe); }
+.wf-terminal-end   { border-right: 3px solid #7ac88c; }
+.wf-terminal.running { animation: wf-card-pulse 2s ease-in-out infinite; border-color: var(--accent); color: var(--accent); }
+.wf-terminal.done    { color: #7ac88c; border-color: rgba(122,200,140,0.45); }
+.wf-terminal-label   { font-weight: 700; }
 
 .wf-card {
   position: relative;
