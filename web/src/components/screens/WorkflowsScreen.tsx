@@ -377,57 +377,8 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
                 )}
               </div>
 
-              {/* Workflow start prompt — shown when the workflow declares any
-                  inputs. The user fills these before clicking Run. */}
-              {(active.inputs?.length ?? 0) > 0 ? (
-                <div className="wf-inputs-panel" data-testid="wf-inputs-panel">
-                  <div className="wf-inputs-head">
-                    <span className="wf-inputs-label">Start prompt — workflow inputs</span>
-                    <span className="wf-inputs-hint">These values are passed to the first agent at run time. Required fields marked *.</span>
-                  </div>
-                  <div className="wf-inputs-grid">
-                    {active.inputs!.map((f) => {
-                      const v = inputDrafts[active.id]?.[f.name] ?? ''
-                      const required = f.required === true
-                      // Render type=text / markdown as a multi-line textarea
-                      // (lets the user paste a free-form prompt). Everything
-                      // else (string, hostname, email, enum<>, etc.) stays a
-                      // single-line input.
-                      const isLongText = f.type === 'text' || f.type === 'markdown'
-                      const onChange = (val: string) => {
-                        const next = { ...(inputDrafts[active.id] ?? {}), [f.name]: val }
-                        setInputDrafts((d) => ({ ...d, [active.id]: next }))
-                      }
-                      return (
-                        <label className="wf-inputs-field" key={f.name} data-testid={`wf-input-${f.name}`}>
-                          <span className="wf-inputs-name">
-                            {f.name}{required ? <span className="wf-inputs-required">*</span> : null}
-                            <span className="wf-inputs-type">{f.type}</span>
-                          </span>
-                          {isLongText ? (
-                            <textarea
-                              className="wf-inputs-input wf-inputs-textarea"
-                              rows={5}
-                              value={v}
-                              placeholder={f.desc ?? `Enter ${f.name}…`}
-                              onChange={(e) => onChange(e.target.value)}
-                            />
-                          ) : (
-                            <input
-                              className="wf-inputs-input"
-                              type="text"
-                              value={v}
-                              placeholder={f.desc ?? `Enter ${f.name}…`}
-                              onChange={(e) => onChange(e.target.value)}
-                            />
-                          )}
-                          {f.desc ? <span className="wf-inputs-desc">{f.desc}</span> : null}
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-              ) : null}
+              {/* Inputs are edited inline on the START canvas node below.
+                  No separate panel — keeps the screen compact. */}
 
               {startError ? <div className="chat-msg-error" data-testid="wf-start-error" style={{ marginTop: 8 }}>{startError}</div> : null}
             </div>

@@ -73,10 +73,8 @@ type StartNodeData = {
   onAddNext: (anchor: HTMLElement | null) => void
   isLast: boolean
   values: Record<string, string>
-  /** Click handler for an input field — caller opens a popover anchored
-   *  to the clicked button so the user can edit the value without the
-   *  textarea consuming canvas real estate. */
-  onEditInput?: (name: string, anchor: HTMLElement) => void
+  /** Update a field's value — wired to the inline textarea / input. */
+  onValueChange?: (name: string, value: string) => void
   /** Append a new workflow input. Used when the workflow declared none
    *  and the user wants to add a free-form prompt textarea on the fly. */
   onAddInput?: () => void
@@ -111,7 +109,7 @@ function iconFor(name: string) {
 /* ===== Node renderers ===== */
 
 function StartNode({ data }: NodeProps<RFNode<StartNodeData, 'workflowInput'>>): JSX.Element {
-  const { inputs, status, onAddNext, isLast, values, onAddInput, onEditInput } = data
+  const { inputs, status, onAddNext, isLast, values, onAddInput, onValueChange } = data
   const running = status === 'running'
   const done = status === 'completed'
   return (
@@ -126,27 +124,38 @@ function StartNode({ data }: NodeProps<RFNode<StartNodeData, 'workflowInput'>>):
         </div>
       </div>
       {inputs.length > 0 ? (
-        <div className="fc-fields">
+        <div className="fc-fields fc-fields--editable">
           {inputs.map((f) => {
+            const isLong = f.type === 'text' || f.type === 'markdown'
             const v = values[f.name] ?? ''
-            const preview = v ? (v.length > 32 ? v.slice(0, 32) + '…' : v) : null
             return (
-              <button
-                type="button"
-                key={f.name}
-                className={`fc-field fc-field--clickable nodrag ${preview ? 'has-value' : ''}`}
-                title={f.desc ?? `Click to edit ${f.name}`}
-                onClick={(e) => { e.stopPropagation(); onEditInput?.(f.name, e.currentTarget) }}
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <span className="fc-field-name">
-                  {f.name}{f.required ? <span className="fc-required">*</span> : null}
-                </span>
-                <span className="fc-field-preview">
-                  {preview ?? <span className="fc-field-placeholder">click to enter…</span>}
-                </span>
-                <span className="fc-field-type">{f.type}</span>
-              </button>
+              <div key={f.name} className="fc-field fc-field--editor" title={f.desc ?? ''}>
+                <div className="fc-field-row">
+                  <span className="fc-field-name">{f.name}{f.required ? <span className="fc-required">*</span> : null}</span>
+                  <span className="fc-field-type">{f.type}</span>
+                </div>
+                {isLong ? (
+                  <textarea
+                    className="fc-field-input fc-field-textarea nodrag"
+                    rows={3}
+                    value={v}
+                    placeholder={f.desc ?? `Enter ${f.name}…`}
+                    onChange={(e) => onValueChange?.(f.name, e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <input
+                    className="fc-field-input nodrag"
+                    type="text"
+                    value={v}
+                    placeholder={f.desc ?? `Enter ${f.name}…`}
+                    onChange={(e) => onValueChange?.(f.name, e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
+                )}
+              </div>
             )
           })}
         </div>
@@ -371,7 +380,7 @@ function buildElements(
   onOpenStep: (id: string) => void,
   onAddNext: (predecessorId: string, anchor: HTMLElement | null) => void,
   inputValues: Record<string, string>,
-  onEditInput?: (name: string, anchor: HTMLElement) => void,
+  onValueChange?: (name: string, value: string) => void,
   onAddInput?: () => void,
 ): { nodes: FlowNode[]; edges: RFEdge[] } {
   const agentMap = new Map(agents.map((a) => [a.id, a]))
@@ -390,7 +399,7 @@ function buildElements(
       onAddNext: (anchor) => onAddNext('__start__', anchor),
       isLast: workflow.steps.length === 0,
       values: inputValues,
-      onEditInput,
+      onValueChange,
       onAddInput,
     },
     draggable: true,
@@ -561,32 +570,23 @@ function AddPopover({
 
 /* ===== Main ===== */
 
-interface InputEditPopoverState {
-  fieldName: string
-  anchorRect: DOMRect
-}
-
 function InnerCanvas({
   workflow, agents, runState, onWorkflowChange, onOpenStep, selectedStepId,
   inputValues, onInputChange, onAddInput,
 }: Props): JSX.Element {
   const rf = useReactFlow()
   const [popover, setPopover] = useState<AddPopoverState | null>(null)
-  const [inputPopover, setInputPopover] = useState<InputEditPopoverState | null>(null)
   // Track the last step id so we can pan to it after a structure change.
   const lastStepRef = useRef<string | null>(null)
   const onAddNext = useCallback((predecessorId: string, anchor: HTMLElement | null) => {
     if (!anchor) return
     setPopover({ predecessorId, anchorRect: anchor.getBoundingClientRect() })
   }, [])
-  const onEditInput = useCallback((name: string, anchor: HTMLElement) => {
-    setInputPopover({ fieldName: name, anchorRect: anchor.getBoundingClientRect() })
-  }, [])
 
   const safeValues = inputValues ?? {}
   const { nodes, edges } = useMemo(
-    () => buildElements(workflow, agents, runState, selectedStepId, onOpenStep, onAddNext, safeValues, onEditInput, onAddInput),
-    [workflow, agents, runState, selectedStepId, onOpenStep, onAddNext, safeValues, onEditInput, onAddInput],
+    () => buildElements(workflow, agents, runState, selectedStepId, onOpenStep, onAddNext, safeValues, onInputChange, onAddInput),
+    [workflow, agents, runState, selectedStepId, onOpenStep, onAddNext, safeValues, onInputChange, onAddInput],
   )
 
   // Mutable copy so React Flow can drag without going through the store on every frame.
@@ -700,99 +700,7 @@ function InnerCanvas({
           onClose={() => setPopover(null)}
         />
       ) : null}
-      {inputPopover ? (
-        <InputEditPopover
-          state={inputPopover}
-          field={(workflow.inputs ?? []).find((f) => f.name === inputPopover.fieldName)}
-          value={safeValues[inputPopover.fieldName] ?? ''}
-          onChange={(v) => onInputChange?.(inputPopover.fieldName, v)}
-          onClose={() => setInputPopover(null)}
-        />
-      ) : null}
     </>
-  )
-}
-
-/* ===== Input edit popover ===== */
-
-function InputEditPopover({
-  state, field, value, onChange, onClose,
-}: {
-  state: InputEditPopoverState
-  field: Field | undefined
-  value: string
-  onChange: (v: string) => void
-  onClose: () => void
-}): JSX.Element | null {
-  const ref = useRef<HTMLDivElement>(null)
-  const taRef = useRef<HTMLTextAreaElement>(null)
-  const inRef = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [onClose])
-  useEffect(() => {
-    // Focus + select-all so the user can immediately overtype.
-    if (taRef.current) { taRef.current.focus(); taRef.current.select() }
-    else if (inRef.current) { inRef.current.focus(); inRef.current.select() }
-  }, [state.fieldName])
-
-  if (!field) return null
-  const isLong = field.type === 'text' || field.type === 'markdown'
-  const POPOVER_W = 480
-  const POPOVER_H = isLong ? 280 : 150
-  const naiveTop = state.anchorRect.bottom + 6
-  const naiveLeft = state.anchorRect.left
-  const top = Math.max(8, Math.min(naiveTop, window.innerHeight - POPOVER_H - 8))
-  const left = Math.max(8, Math.min(naiveLeft, window.innerWidth - POPOVER_W - 8))
-
-  return (
-    <div
-      ref={ref}
-      className="fc-input-popover"
-      style={{ top, left, width: POPOVER_W }}
-      data-testid="fc-input-popover"
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') { e.preventDefault(); onClose() }
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onClose() }
-      }}
-    >
-      <div className="fc-input-popover-head">
-        <span className="fc-input-popover-name">
-          {field.name}{field.required ? <span className="fc-required">*</span> : null}
-        </span>
-        <span className="fc-input-popover-type">{field.type}</span>
-        <button className="fc-input-popover-close" onClick={onClose} aria-label="Close">×</button>
-      </div>
-      {field.desc ? <div className="fc-input-popover-desc">{field.desc}</div> : null}
-      {isLong ? (
-        <textarea
-          ref={taRef}
-          className="fc-input-popover-textarea"
-          rows={8}
-          value={value}
-          placeholder={field.desc ?? `Enter ${field.name}…`}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      ) : (
-        <input
-          ref={inRef}
-          className="fc-input-popover-input"
-          type="text"
-          value={value}
-          placeholder={field.desc ?? `Enter ${field.name}…`}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      )}
-      <div className="fc-input-popover-foot">
-        <span className="fc-input-popover-hint">⏎ Cmd+Enter to close · Esc to cancel</span>
-        <button className="fc-input-popover-done" onClick={onClose}>Done</button>
-      </div>
-    </div>
   )
 }
 
