@@ -189,6 +189,9 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   // MCP catalog = seed (built-in) + overlay (user-added via UI). Overlay
   // entries persist at <workspaceRoot>/mcp-servers.json; if the file is
   // missing or malformed, we boot with seed-only.
+  // Important: load secrets synchronously BEFORE building the seed
+  // catalog so atlassian / other secret-gated entries register on boot.
+  secretStore.loadSync()
   const seedConfig = loadSeedConfig(process.env, secretStore)
   const overlayConfig = loadMcpOverlay(root)
   // De-dup: seed wins on id collision (the user can't shadow a built-in).

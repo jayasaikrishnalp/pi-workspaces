@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import fsSync from 'node:fs'
 import path from 'node:path'
 import { EventEmitter } from 'node:events'
 
@@ -49,22 +50,45 @@ export class SecretStore extends EventEmitter {
     await fs.mkdir(path.dirname(this.secretsPath), { recursive: true })
     try {
       const raw = await fs.readFile(this.secretsPath, 'utf8')
-      const data = JSON.parse(raw) as Record<string, SecretRow>
-      for (const [k, v] of Object.entries(data)) {
-        if (v && typeof v === 'object' && typeof v.value === 'string' && typeof v.updatedAt === 'number') {
-          this.secrets.set(k, { value: v.value, updatedAt: v.updatedAt })
-        }
-      }
+      this.parseAndPopulate(raw)
     } catch (err: unknown) {
-      const code = (err as NodeJS.ErrnoException)?.code
-      if (code === 'ENOENT') {
-        // First run; nothing to load.
-      } else {
-        // Corrupt file — log and start fresh. The next persist() will overwrite it.
-        console.error('[secret-store] secrets.json unreadable; starting fresh:', err)
-      }
+      this.handleLoadError(err)
     }
     this.loaded = true
+  }
+
+  /** Synchronous companion to load(), used by wiring at boot so the seed
+   *  catalog (e.g. atlassian MCP gating) can read secrets before the
+   *  process serves any requests. Idempotent with the async load(). */
+  loadSync(): void {
+    if (this.loaded) return
+    fsSync.mkdirSync(path.dirname(this.secretsPath), { recursive: true })
+    try {
+      const raw = fsSync.readFileSync(this.secretsPath, 'utf8')
+      this.parseAndPopulate(raw)
+    } catch (err: unknown) {
+      this.handleLoadError(err)
+    }
+    this.loaded = true
+  }
+
+  private parseAndPopulate(raw: string): void {
+    const data = JSON.parse(raw) as Record<string, SecretRow>
+    for (const [k, v] of Object.entries(data)) {
+      if (v && typeof v === 'object' && typeof v.value === 'string' && typeof v.updatedAt === 'number') {
+        this.secrets.set(k, { value: v.value, updatedAt: v.updatedAt })
+      }
+    }
+  }
+
+  private handleLoadError(err: unknown): void {
+    const code = (err as NodeJS.ErrnoException)?.code
+    if (code === 'ENOENT') {
+      // First run; nothing to load.
+    } else {
+      // Corrupt file — log and start fresh. The next persist() will overwrite it.
+      console.error('[secret-store] secrets.json unreadable; starting fresh:', err)
+    }
   }
 
   /**
