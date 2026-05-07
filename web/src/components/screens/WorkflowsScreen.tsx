@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { Icons } from '../icons/Icons'
 import {
@@ -8,13 +8,20 @@ import {
 } from '../../lib/workflows-store'
 import { loadAgents, saveAgents, AGENT_KIND_META, type Agent } from '../../lib/agents-store'
 import { createSkill, getKbGraph } from '../../lib/api'
+import { useWorkflowRun } from '../../hooks/useWorkflowRun'
+import { WorkflowCanvas } from './workflows/WorkflowCanvas'
 
 function iconFor(name: string) {
   const all = Icons as unknown as Record<string, (p: { size?: number }) => JSX.Element>
   return all[name] ?? all.swarm
 }
 
-export function WorkflowsScreen(): JSX.Element {
+interface Props {
+  /** Notifies the parent (App.tsx) when a run is in flight so it can lock chat. */
+  onRunStateChange?: (info: { running: boolean; workflowName: string | null; activeStepId: string | null }) => void
+}
+
+export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
   const [workflows, setWorkflows] = useState<Workflow[]>(loadWorkflows)
   const [activeId, setActiveId] = useState<string | null>(workflows[0]?.id ?? null)
   const [agents, setAgents] = useState<Agent[]>(loadAgents)
@@ -37,6 +44,18 @@ export function WorkflowsScreen(): JSX.Element {
   }, [])
 
   const active = workflows.find((w) => w.id === activeId) ?? null
+
+  // Live run state for the active workflow.
+  const { state: runState, run, cancel, starting, startError } = useWorkflowRun(active, agents)
+
+  // Surface run state to parent so it can lock the chat composer.
+  useEffect(() => {
+    onRunStateChange?.({
+      running: runState.status === 'running' || runState.status === 'queued',
+      workflowName: active?.name ?? null,
+      activeStepId: runState.activeStepId,
+    })
+  }, [runState.status, runState.activeStepId, active?.name, onRunStateChange])
 
   // Refresh YAML preview when active workflow / agents change while panel open.
   useEffect(() => {
@@ -235,10 +254,10 @@ export function WorkflowsScreen(): JSX.Element {
           ))}
         </aside>
 
-        {/* CENTER — composer */}
+        {/* CENTER — header + canvas (or YAML editor) */}
         {active ? (
-          <div className="wf-composer" style={{ overflow: 'auto', padding: 16 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+          <div className="wf-composer" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, padding: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
               <input
                 className="input mono"
                 value={active.name}
@@ -247,45 +266,51 @@ export function WorkflowsScreen(): JSX.Element {
                 data-testid="wf-name-input"
                 style={{ fontSize: 16, fontWeight: 600 }}
               />
-              <div style={{ display: 'flex', gap: 8, fontSize: 11, opacity: 0.6 }}>
+              <div style={{ display: 'flex', gap: 8, fontSize: 11, opacity: 0.6, alignItems: 'center' }}>
                 <span className="kk-label-tiny">id</span>
                 <span className="mono">{active.id}</span>
                 <span>·</span>
                 <span className="mono">{active.steps.length} steps</span>
+                <span>·</span>
+                <span className="mono" data-testid="wf-run-status">{runState.status}</span>
+                {runState.runId ? <span className="mono" style={{ opacity: 0.5 }}>run {runState.runId.slice(0, 8)}</span> : null}
+                <span style={{ flex: 1 }} />
+                {runState.status === 'running' || runState.status === 'queued' ? (
+                  <button
+                    className="btn btn-ghost small"
+                    onClick={() => { void cancel() }}
+                    data-testid="wf-cancel"
+                  >Cancel</button>
+                ) : (
+                  <button
+                    className="btn btn-accent small"
+                    disabled={starting || active.steps.length === 0}
+                    onClick={() => { void run() }}
+                    data-testid="wf-run"
+                  >▸ Run</button>
+                )}
+                <button
+                  className="btn btn-ghost small"
+                  onClick={() => { setShowYaml((s) => !s); setYamlError(null) }}
+                  data-testid="wf-toggle-yaml"
+                >{showYaml ? 'Hide' : 'Edit'} YAML</button>
               </div>
               <textarea
                 className="input mono"
-                rows={3}
+                rows={2}
                 value={active.task}
                 onChange={(e) => updateActive({ task: e.target.value })}
                 placeholder="Describe the task this workflow accomplishes…"
                 data-testid="wf-task-input"
               />
+              {startError ? <div className="chat-msg-error" data-testid="wf-start-error">{startError}</div> : null}
             </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
-              <span className="kk-label-tiny" style={{ flex: 1 }}>pipeline (flow)</span>
-              <button
-                className="btn btn-ghost small"
-                onClick={() => { setShowYaml((s) => !s); setYamlError(null) }}
-                data-testid="wf-toggle-yaml"
-              >{showYaml ? 'Hide' : 'Edit'} YAML</button>
-            </div>
-
-            <PipelineList
-              workflow={active}
-              agents={agents}
-              onRemove={removeStep}
-              onUp={(i) => moveStep(i, -1)}
-              onDown={(i) => moveStep(i, +1)}
-              onUpdate={updateStep}
-            />
 
             {showYaml ? (
-              <div style={{ marginTop: 16 }}>
+              <div style={{ padding: 16, overflow: 'auto', flex: 1 }}>
                 <textarea
                   className="input mono"
-                  rows={20}
+                  rows={24}
                   value={yamlDraft}
                   onChange={(e) => setYamlDraft(e.target.value)}
                   data-testid="wf-yaml-textarea"
@@ -300,7 +325,16 @@ export function WorkflowsScreen(): JSX.Element {
                   >Reset</button>
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <WorkflowCanvas
+                  workflow={active}
+                  agents={agents}
+                  runState={runState}
+                  onCancel={cancel}
+                />
+              </div>
+            )}
           </div>
         ) : (
           <div className="dash-empty" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -342,188 +376,6 @@ export function WorkflowsScreen(): JSX.Element {
           })}
         </aside>
       </div>
-    </div>
-  )
-}
-
-interface PipelineProps {
-  workflow: Workflow
-  agents: Agent[]
-  onRemove: (idx: number) => void
-  onUp: (idx: number) => void
-  onDown: (idx: number) => void
-  onUpdate: (idx: number, patch: Partial<WorkflowStep>) => void
-}
-
-function PipelineList({ workflow, agents, onRemove, onUp, onDown, onUpdate }: PipelineProps): JSX.Element {
-  const stepIds = useMemo(() => workflow.steps.map((s) => s.id), [workflow.steps])
-  const nextOptions: Array<{ value: string; label: string }> = useMemo(() => {
-    return [
-      { value: '', label: '(default: next step)' },
-      { value: 'end', label: 'end (terminate)' },
-      ...stepIds.map((id) => ({ value: id, label: id })),
-    ]
-  }, [stepIds])
-
-  if (workflow.steps.length === 0) {
-    return (
-      <div className="dash-empty" data-testid="wf-pipeline-empty">
-        Click an agent on the right to add it to the pipeline.
-      </div>
-    )
-  }
-  return (
-    <div className="wf-pipeline" data-testid="wf-pipeline">
-      {workflow.steps.map((s, idx) => {
-        const a = agents.find((x) => x.id === s.agentId)
-        const meta = a ? AGENT_KIND_META[a.kind] : null
-        const Icon = a && meta ? iconFor(meta.icon) : Icons.conductor
-        return (
-          <div key={`${s.id}-${idx}`} data-testid={`wf-step-${idx}`}>
-            <div
-              className="wf-step"
-              style={{
-                display: 'grid', gridTemplateColumns: '32px 32px 1fr auto', gap: 8,
-                padding: 10, borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: meta?.bg ?? 'var(--bg-elev)',
-                borderLeft: `3px solid ${meta?.color ?? 'var(--border)'}`,
-              }}
-            >
-              <div className="mono" style={{ fontSize: 11, opacity: 0.6, alignSelf: 'center', textAlign: 'center' }}>{String(idx + 1).padStart(2, '0')}</div>
-              <div style={{ alignSelf: 'center', textAlign: 'center' }}><Icon size={14} /></div>
-              <div style={{ minWidth: 0 }}>
-                {a ? (
-                  <>
-                    <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{a.name}</div>
-                    <div className="mono" style={{ fontSize: 10, opacity: 0.6 }}>{a.kind} · {a.model}</div>
-                  </>
-                ) : (
-                  <div className="mono" style={{ fontSize: 12, color: 'var(--err, #f87171)' }}>missing agent: {s.agentId}</div>
-                )}
-                <input
-                  className="input mono"
-                  style={{ marginTop: 6, width: '100%', fontSize: 11 }}
-                  value={s.note}
-                  onChange={(e) => onUpdate(idx, { note: e.target.value })}
-                  placeholder="Step instruction (optional)…"
-                  data-testid={`wf-step-note-${idx}`}
-                />
-                <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <span className="kk-label-tiny">id</span>
-                  <input
-                    className="input mono"
-                    style={{ fontSize: 11, width: 120 }}
-                    value={s.id}
-                    onChange={(e) => onUpdate(idx, { id: e.target.value })}
-                  />
-                  <span className="kk-label-tiny">next</span>
-                  <select
-                    className="input mono"
-                    style={{ fontSize: 11 }}
-                    value={s.next ?? ''}
-                    onChange={(e) => onUpdate(idx, { next: e.target.value || undefined })}
-                  >
-                    {nextOptions.filter((o) => o.value !== s.id).map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <BranchEditor
-                  step={s}
-                  options={nextOptions.filter((o) => o.value !== s.id)}
-                  onChange={(branches) => onUpdate(idx, { branches })}
-                />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <button className="btn btn-ghost small" disabled={idx === 0} onClick={() => onUp(idx)} title="Move up">↑</button>
-                <button className="btn btn-ghost small" disabled={idx === workflow.steps.length - 1} onClick={() => onDown(idx)} title="Move down">↓</button>
-                <button className="btn btn-ghost small" onClick={() => onRemove(idx)} title="Delete step" data-testid={`wf-step-remove-${idx}`}>×</button>
-              </div>
-            </div>
-            {idx < workflow.steps.length - 1 ? (
-              <div style={{ textAlign: 'center', padding: '4px 0', opacity: 0.4, fontSize: 12 }}>↓</div>
-            ) : null}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function BranchEditor({
-  step, options, onChange,
-}: {
-  step: WorkflowStep
-  options: Array<{ value: string; label: string }>
-  onChange: (branches: Record<string, string> | undefined) => void
-}): JSX.Element {
-  const [adding, setAdding] = useState(false)
-  const [decision, setDecision] = useState('')
-  const [target, setTarget] = useState('end')
-  const branches = step.branches ?? {}
-  const entries = Object.entries(branches)
-
-  const apply = (next: Record<string, string>) => {
-    onChange(Object.keys(next).length > 0 ? next : undefined)
-  }
-
-  return (
-    <div style={{ marginTop: 6 }}>
-      <div className="kk-label-tiny" style={{ marginBottom: 4 }}>branches (optional)</div>
-      {entries.length === 0 ? null : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {entries.map(([key, val]) => (
-            <div key={key} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11 }}>
-              <span className="mono" style={{ flex: '0 0 110px' }}>"{key}"</span>
-              <span style={{ opacity: 0.5 }}>→</span>
-              <select
-                className="input mono"
-                style={{ fontSize: 11, flex: 1 }}
-                value={val}
-                onChange={(e) => apply({ ...branches, [key]: e.target.value })}
-              >
-                {options.map((o) => <option key={o.value || 'default'} value={o.value || ''}>{o.label}</option>)}
-              </select>
-              <button
-                className="btn btn-ghost small"
-                onClick={() => {
-                  const { [key]: _drop, ...rest } = branches
-                  void _drop
-                  apply(rest)
-                }}
-                title="Remove branch"
-              >×</button>
-            </div>
-          ))}
-        </div>
-      )}
-      {adding ? (
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
-          <input
-            className="input mono"
-            style={{ flex: '0 0 110px', fontSize: 11 }}
-            placeholder="decision"
-            value={decision}
-            onChange={(e) => setDecision(e.target.value)}
-          />
-          <span style={{ opacity: 0.5 }}>→</span>
-          <select className="input mono" style={{ fontSize: 11, flex: 1 }} value={target} onChange={(e) => setTarget(e.target.value)}>
-            {options.map((o) => <option key={o.value || 'default'} value={o.value || ''}>{o.label}</option>)}
-          </select>
-          <button
-            className="btn btn-ghost small"
-            disabled={!decision.trim()}
-            onClick={() => {
-              apply({ ...branches, [decision.trim()]: target })
-              setDecision(''); setTarget('end'); setAdding(false)
-            }}
-          >add</button>
-          <button className="btn btn-ghost small" onClick={() => setAdding(false)}>×</button>
-        </div>
-      ) : (
-        <button className="btn btn-ghost small" onClick={() => setAdding(true)} style={{ fontSize: 11, marginTop: 4 }}>+ branch</button>
-      )}
     </div>
   )
 }

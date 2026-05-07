@@ -6,7 +6,11 @@ import { SessionsSidebar } from '../chat/SessionsSidebar'
 import { useChatStream } from '../../hooks/useChatStream'
 import { listSessions, setSessionTitle, type SessionInfo } from '../../lib/api'
 
-interface Props { onSaveSkill?: (body: string) => void }
+interface Props {
+  onSaveSkill?: (body: string) => void
+  /** When set, the composer is disabled with a banner. The string explains why. */
+  lockedReason?: string | null
+}
 
 interface QuickAction {
   id: string
@@ -68,7 +72,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   },
 ]
 
-export function ChatScreen({ onSaveSkill }: Props = {}): JSX.Element {
+export function ChatScreen({ onSaveSkill, lockedReason }: Props = {}): JSX.Element {
   const chat = useChatStream()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [seed, setSeed] = useState<string | undefined>(undefined)
@@ -199,10 +203,19 @@ export function ChatScreen({ onSaveSkill }: Props = {}): JSX.Element {
           ) : null}
         </div>
       </div>
+      {lockedReason ? (
+        <div
+          className="banner banner-warn"
+          data-testid="chat-locked-banner"
+          style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, borderTop: '1px solid var(--border)', background: 'rgba(255,203,82,0.10)' }}
+        >
+          🔒 {lockedReason}
+        </div>
+      ) : null}
       <Composer
         onSend={chat.send}
         streaming={chat.streaming}
-        disabled={!chat.sessionKey}
+        disabled={!chat.sessionKey || !!lockedReason}
         seed={seed}
         seedNonce={seedNonce}
         onAbort={chat.abort}

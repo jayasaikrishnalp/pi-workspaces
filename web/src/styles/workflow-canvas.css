@@ -1,0 +1,234 @@
+/* Railway-style workflow canvas — agent cards on a column grid connected
+   by faint dotted SVG curves. The canvas is positioned so the SVG overlay
+   sits on top of the grid; cards live in the grid, edges live in the SVG. */
+
+.wf-canvas {
+  position: relative;
+  height: 100%;
+  min-height: 400px;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.025) 1px, transparent 1px) 0 0 / 18px 18px,
+    var(--bg, #0c0d10);
+}
+
+.wf-canvas-grid {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 240px;
+  align-items: start;
+  gap: 80px 100px;
+  padding: 40px 60px;
+  z-index: 2;
+  min-width: max-content;
+  min-height: 100%;
+}
+
+.wf-card {
+  position: relative;
+  background: rgba(20, 22, 28, 0.85);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-left: 3px solid var(--k, var(--border, #4a5568));
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text-primary, #e6e6e9);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.02), 0 4px 16px rgba(0,0,0,0.35);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+.wf-card:hover { transform: translateY(-1px); box-shadow: 0 1px 0 rgba(255,255,255,0.03), 0 8px 24px rgba(0,0,0,0.5); }
+
+.wf-card[data-status="idle"] { opacity: 0.7; }
+.wf-card[data-status="queued"] { opacity: 0.85; border-left-color: rgba(255,255,255,0.15); }
+.wf-card[data-status="running"] {
+  border-color: var(--k);
+  box-shadow: 0 0 0 1px var(--k), 0 0 24px color-mix(in srgb, var(--k) 30%, transparent);
+  animation: wf-card-pulse 2s ease-in-out infinite;
+}
+.wf-card[data-status="completed"] {
+  border-color: rgba(122,200,140,0.45);
+  border-left-color: #7ac88c;
+}
+.wf-card[data-status="failed"] {
+  border-color: rgba(248,113,113,0.45);
+  border-left-color: #f87171;
+  background: rgba(40,16,16,0.85);
+}
+.wf-card[data-status="skipped"] { opacity: 0.5; }
+.wf-card.active { outline: 1px solid color-mix(in srgb, var(--k) 60%, transparent); outline-offset: 2px; }
+
+@keyframes wf-card-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px var(--k), 0 0 16px color-mix(in srgb, var(--k) 25%, transparent); }
+  50%      { box-shadow: 0 0 0 1px var(--k), 0 0 28px color-mix(in srgb, var(--k) 50%, transparent); }
+}
+
+.wf-card-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 6px;
+}
+.wf-card-icon {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+  background: var(--kbg, rgba(255,255,255,0.04));
+  color: var(--k);
+  flex: 0 0 auto;
+}
+.wf-card-title {
+  flex: 1; min-width: 0;
+  font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wf-card-status {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; opacity: 0.75;
+}
+.wf-card-status .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+}
+.wf-card[data-status="running"] .wf-card-status .dot { background: var(--k); animation: wf-dot 1.2s ease-in-out infinite; }
+.wf-card[data-status="completed"] .wf-card-status .dot { background: #7ac88c; }
+.wf-card[data-status="failed"] .wf-card-status .dot { background: #f87171; }
+
+@keyframes wf-dot { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+.wf-card-meta {
+  font-size: 10px; opacity: 0.55;
+  margin-bottom: 4px;
+}
+
+.wf-card-note {
+  font-size: 11px; opacity: 0.75;
+  margin-bottom: 6px;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.4;
+}
+
+.wf-card-tail {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 4px;
+  padding: 4px 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0.7;
+}
+.wf-card[data-status="idle"] .wf-card-tail,
+.wf-card[data-status="queued"] .wf-card-tail { display: none; }
+
+.wf-card-decision {
+  margin-top: 4px;
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  background: color-mix(in srgb, var(--k) 18%, transparent);
+  color: var(--k);
+  border: 1px solid color-mix(in srgb, var(--k) 35%, transparent);
+}
+
+.wf-card-badge {
+  position: absolute;
+  top: -8px; right: -8px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  background: var(--bg, #0c0d10);
+  border: 1px solid;
+  z-index: 1;
+}
+.wf-card[data-status="completed"] .wf-card-badge { color: #7ac88c; border-color: #7ac88c; }
+.wf-card[data-status="failed"] .wf-card-badge { color: #f87171; border-color: #f87171; }
+.wf-card[data-status="running"] .wf-card-badge { color: var(--k); border-color: var(--k); }
+
+/* SVG edge layer — sits behind cards (z-index 1) so card hovers feel right. */
+.wf-edges {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.wf-edges path {
+  fill: none;
+  stroke: rgba(255,255,255,0.18);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 5;
+}
+.wf-edges path.active {
+  stroke: var(--k, #1dacfe);
+  animation: wf-edge-flow 1.2s linear infinite;
+}
+.wf-edges path.chosen {
+  stroke: rgba(122,200,140,0.65);
+  stroke-dasharray: 4 4;
+}
+.wf-edges path.ghost { stroke: rgba(255,255,255,0.07); }
+.wf-edges path.back { stroke: rgba(255,203,82,0.55); }
+
+@keyframes wf-edge-flow {
+  to { stroke-dashoffset: -18; }
+}
+
+.wf-edge-label {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9.5px;
+  fill: rgba(255,255,255,0.5);
+  text-anchor: middle;
+}
+.wf-edges path.chosen + .wf-edge-label { fill: rgba(122,200,140,0.85); }
+
+/* Banner above the canvas (cycles, errors). */
+.wf-canvas-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255,203,82,0.08);
+  color: rgba(255,203,82,0.9);
+  border-bottom: 1px solid rgba(255,203,82,0.2);
+  font-size: 11px;
+}
+.wf-canvas-banner.err {
+  background: rgba(248,113,113,0.08);
+  color: rgba(248,113,113,0.9);
+  border-color: rgba(248,113,113,0.25);
+}
+
+/* Side panel for full output of the active card. */
+.wf-side-panel {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 380px;
+  background: rgba(15,17,22,0.95);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  z-index: 5;
+  box-shadow: -16px 0 32px rgba(0,0,0,0.4);
+}
+.wf-side-panel-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 600;
+}
+.wf-side-panel-body {
+  flex: 1; min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px; line-height: 1.5;
+  white-space: pre-wrap;
+  color: rgba(255,255,255,0.85);
+}
+.wf-side-panel-foot {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  opacity: 0.55;
+  display: flex; gap: 12px; flex-wrap: wrap;
+}

@@ -63,6 +63,10 @@ export function App(): JSX.Element {
   const [vibe, setVibe] = useState<string>(loadVibe)
   const [agents, setAgents] = useState<Agent[]>(loadAgents)
   useEffect(() => { saveAgents(agents) }, [agents])
+  // Workflow run state surfaced from WorkflowsScreen so we can lock the chat
+  // composer while a run is in flight. Pi serializes globally — chat sends
+  // would otherwise return BRIDGE_BUSY mid-workflow.
+  const [chatLockedReason, setChatLockedReason] = useState<string | null>(null)
   const probeState = useApi('probe', probe)
   const sessionsState = useApi('app.sessions', listSessions)
 
@@ -155,7 +159,7 @@ export function App(): JSX.Element {
         <ProbeBanner probe={probeState.data} loading={probeState.loading} />
         <div className="main-content">
           {active === 'dashboard' ? <DashboardScreen onPick={setActive} />
-            : active === 'chat'      ? <ChatScreen onSaveSkill={(body) => { setSaveSkillBody(body); setSaveSkillOpen(true) }} />
+            : active === 'chat'      ? <ChatScreen onSaveSkill={(body) => { setSaveSkillBody(body); setSaveSkillOpen(true) }} lockedReason={chatLockedReason} />
             : active === 'graph'     ? <GraphScreen />
             : active === 'kb'        ? <KnowledgeBaseScreen />
             : active === 'skills'    ? <SkillsScreen />
@@ -167,7 +171,17 @@ export function App(): JSX.Element {
             : active === 'mcp'       ? <McpScreen />
             : active === 'secrets'   ? <SecretsScreen />
             : active === 'confluence'? <ConfluenceScreen />
-            : active === 'workflows' ? <WorkflowsScreen />
+            : active === 'workflows' ? (
+              <WorkflowsScreen
+                onRunStateChange={(info) => {
+                  setChatLockedReason(
+                    info.running
+                      ? `Workflow "${info.workflowName ?? 'unknown'}" running${info.activeStepId ? ` · step ${info.activeStepId}` : ''}…`
+                      : null,
+                  )
+                }}
+              />
+            )
             : active === 'teams'     ? <TeamsScreen />
             : active === 'sessions'  ? <SessionsScreen onPick={setActive} />
             : <PlaceholderScreen id={active} preview={isPreview} />}
