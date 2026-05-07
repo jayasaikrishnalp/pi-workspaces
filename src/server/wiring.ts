@@ -24,6 +24,7 @@ import { WikiWatcher } from './wiki-watcher.js'
 import { WorkflowRunsStore } from './workflow-runs-store.js'
 import { WorkflowRunBusRegistry } from './workflow-run-bus.js'
 import { WorkflowRunner } from './workflow-runner.js'
+import { PiBridgeStepExecutor } from './pi-bridge-step-executor.js'
 import type { SessionInfo } from '../types/run.js'
 
 const DEFAULT_WIKI_ROOT = path.join(os.homedir(), 'pipeline-information', 'wiki')
@@ -262,6 +263,10 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     workflowRunner = new WorkflowRunner({
       store: workflowRunsStore,
       bus: workflowRunBuses,
+      // Real pi execution: each workflow step calls bridge.send and
+      // collects assistant.delta events from the chat bus. Tests can
+      // replace via runner.setExecutor(...).
+      executor: new PiBridgeStepExecutor({ bridge, runStore, chatBus: bus }),
     })
   }
 
