@@ -389,22 +389,38 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
                     {active.inputs!.map((f) => {
                       const v = inputDrafts[active.id]?.[f.name] ?? ''
                       const required = f.required === true
+                      // Render type=text / markdown as a multi-line textarea
+                      // (lets the user paste a free-form prompt). Everything
+                      // else (string, hostname, email, enum<>, etc.) stays a
+                      // single-line input.
+                      const isLongText = f.type === 'text' || f.type === 'markdown'
+                      const onChange = (val: string) => {
+                        const next = { ...(inputDrafts[active.id] ?? {}), [f.name]: val }
+                        setInputDrafts((d) => ({ ...d, [active.id]: next }))
+                      }
                       return (
                         <label className="wf-inputs-field" key={f.name} data-testid={`wf-input-${f.name}`}>
                           <span className="wf-inputs-name">
                             {f.name}{required ? <span className="wf-inputs-required">*</span> : null}
                             <span className="wf-inputs-type">{f.type}</span>
                           </span>
-                          <input
-                            className="wf-inputs-input"
-                            type="text"
-                            value={v}
-                            placeholder={f.desc ?? `Enter ${f.name}…`}
-                            onChange={(e) => {
-                              const next = { ...(inputDrafts[active.id] ?? {}), [f.name]: e.target.value }
-                              setInputDrafts((d) => ({ ...d, [active.id]: next }))
-                            }}
-                          />
+                          {isLongText ? (
+                            <textarea
+                              className="wf-inputs-input wf-inputs-textarea"
+                              rows={5}
+                              value={v}
+                              placeholder={f.desc ?? `Enter ${f.name}…`}
+                              onChange={(e) => onChange(e.target.value)}
+                            />
+                          ) : (
+                            <input
+                              className="wf-inputs-input"
+                              type="text"
+                              value={v}
+                              placeholder={f.desc ?? `Enter ${f.name}…`}
+                              onChange={(e) => onChange(e.target.value)}
+                            />
+                          )}
                           {f.desc ? <span className="wf-inputs-desc">{f.desc}</span> : null}
                         </label>
                       )

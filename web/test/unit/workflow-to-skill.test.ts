@@ -30,7 +30,7 @@ describe('workflowSkillDescription', () => {
     const wf = DEFAULT_WORKFLOWS.find((w) => w.id === 'wf-l1-ritm-fetch')!
     const desc = workflowSkillDescription(wf)
     expect(desc).toMatch(/L1 Triage/)
-    expect(desc).toMatch(/ritm_number/)
+    expect(desc).toMatch(/prompt/)
   })
 })
 
@@ -44,7 +44,7 @@ describe('workflowToSkillMd', () => {
     expect(md).toContain('## How to invoke')
     expect(md).toContain('## Embedded workflow definition (hive.workflow/v1 YAML)')
     // Lists the typed input
-    expect(md).toMatch(/- \*\*ritm_number\*\* \(`string`\)/)
+    expect(md).toMatch(/- \*\*prompt\*\* \(`text`\)/)
     // Lists at least one declared output
     expect(md).toMatch(/- \*\*summary\*\* \(`markdown`\)/)
     // Embeds the YAML — should round-trip back to the workflow
