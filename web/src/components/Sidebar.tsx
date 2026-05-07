@@ -116,12 +116,6 @@ export function Sidebar(props: Props): JSX.Element {
       <button className="sb-cta secondary" onClick={() => onCommandPalette?.()} data-testid="sb-search">
         <Icons.search size={12} /> Search… <kbd>⌘K</kbd>
       </button>
-      <button className="sb-world" onClick={() => onPick('dashboard')}>
-        <span className="sb-world-icon">π</span>
-        <span>HiveWorld</span>
-        <span className="sb-pill">NEW</span>
-      </button>
-
       <SidebarGroup label="MAIN">
         <SidebarItem icon={<Icons.dashboard size={14} />} label="Dashboard" active={active === 'dashboard'} onClick={() => onPick('dashboard')} />
         <SidebarItem icon={<Icons.chat size={14} />} label="Chat" active={active === 'chat'} onClick={() => onPick('chat')} />
