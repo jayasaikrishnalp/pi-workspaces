@@ -1,8 +1,11 @@
 /**
  * Workflow run endpoints (v2 — agent-driven YAML workflows).
  *
- *   POST  /api/workflow-runs                     body: { workflow, agents, triggeredBy? }
+ *   POST  /api/workflow-runs                     body: { workflow, agents, triggeredBy?, inputs? }
  *                                                → 202 { runId }
+ *                                                inputs: Record<string,string> — values the user
+ *                                                typed in the start-prompt panel; rendered into
+ *                                                each step's WORKFLOW INPUTS section.
  *   POST  /api/workflow-runs/:runId/cancel       → 202 { ok: true }
  *   GET   /api/workflow-runs/:runId              → { run, steps }
  *   GET   /api/workflow-runs/:runId/events       → SSE stream
@@ -36,7 +39,7 @@ function ensureFeature(res: ServerResponse, w: Wiring): w is Wiring & {
   return true
 }
 
-function validateBody(body: unknown): { workflow: Workflow; agents: AgentDef[]; triggeredBy: string | undefined } | string {
+function validateBody(body: unknown): { workflow: Workflow; agents: AgentDef[]; triggeredBy: string | undefined; inputs: Record<string, string> | undefined } | string {
   if (!body || typeof body !== 'object') return 'body must be a JSON object'
   const o = body as Record<string, unknown>
   if (!o.workflow || typeof o.workflow !== 'object') return 'workflow object required'
@@ -56,10 +59,22 @@ function validateBody(body: unknown): { workflow: Workflow; agents: AgentDef[]; 
     if (typeof a.name !== 'string') return `agents[${i}].name required`
     if (typeof a.prompt !== 'string') return `agents[${i}].prompt required`
   }
+  // Read workflow inputs (the values the user typed in the start-prompt
+  // panel). Only string keys with string values are accepted; anything
+  // else is silently dropped so a malformed client can't poison the run.
+  let inputs: Record<string, string> | undefined
+  if (o.inputs && typeof o.inputs === 'object' && !Array.isArray(o.inputs)) {
+    const cleaned: Record<string, string> = {}
+    for (const [k, v] of Object.entries(o.inputs as Record<string, unknown>)) {
+      if (typeof k === 'string' && typeof v === 'string') cleaned[k] = v
+    }
+    if (Object.keys(cleaned).length > 0) inputs = cleaned
+  }
   return {
     workflow: o.workflow as unknown as Workflow,
     agents: o.agents as unknown as AgentDef[],
     triggeredBy: typeof o.triggeredBy === 'string' ? o.triggeredBy : undefined,
+    inputs,
   }
 }
 
@@ -78,6 +93,7 @@ export async function handleWorkflowRunStart(req: IncomingMessage, res: ServerRe
       workflow: validated.workflow,
       agents: validated.agents,
       triggeredBy: validated.triggeredBy ?? 'operator',
+      inputs: validated.inputs,
     })
     jsonOk(res, 202, { runId })
   } catch (err) {

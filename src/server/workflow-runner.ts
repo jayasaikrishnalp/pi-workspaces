@@ -81,6 +81,10 @@ export interface RunnerStartArgs {
   workflow: Workflow
   agents: AgentDef[]
   triggeredBy?: string
+  /** Initial values for workflow.inputs — keyed by input field name. The
+   *  runner injects these into every step's prompt as a WORKFLOW INPUTS
+   *  section so agents can reference e.g. `ritm_number` directly. */
+  inputs?: Record<string, string>
 }
 
 export interface WorkflowRunnerDeps {
@@ -139,6 +143,10 @@ export function composePrompt(
   step: WorkflowStep,
   agent: AgentDef,
   prevOutput: string,
+  /** Workflow-level inputs the user typed in the start-prompt panel. Rendered
+   *  as a WORKFLOW INPUTS section so the agent can reference each by name
+   *  even when the workflow has no explicit bindings. */
+  inputs?: Record<string, string>,
 ): string {
   const branchKeys = step.branches ? Object.keys(step.branches) : []
   const decisionTrailer = branchKeys.length > 0
@@ -150,6 +158,19 @@ export function composePrompt(
     ? `\nPREVIOUS STEP OUTPUT:\n${prevOutput.trim().slice(-PREV_OUTPUT_TAIL_BYTES)}\n`
     : ''
 
+  // Render workflow inputs as `key=value` lines. Agents reference these by
+  // exact field name (e.g. ritm_number, host, region). Empty/whitespace-only
+  // values are skipped so the agent doesn't pattern-match a blank string as
+  // "field present".
+  const inputLines = inputs
+    ? Object.entries(inputs)
+        .filter(([, v]) => typeof v === 'string' && v.trim().length > 0)
+        .map(([k, v]) => `  ${k} = ${v}`)
+    : []
+  const inputsSection = inputLines.length > 0
+    ? `\nWORKFLOW INPUTS (typed by the user when starting this run — use these as the source of truth):\n${inputLines.join('\n')}\n`
+    : ''
+
   return [
     `You are ${agent.name}.`,
     '',
@@ -159,6 +180,7 @@ export function composePrompt(
     `WORKFLOW: ${workflow.name}`,
     workflow.task ? `TASK: ${workflow.task}` : null,
     `STEP: ${step.id}${step.note ? ` — ${step.note}` : ''}`,
+    inputsSection,
     prevSection,
     'Carry out this step now.',
     decisionTrailer,
@@ -253,7 +275,7 @@ export class WorkflowRunner {
     })
     const bus = this.deps.bus.getOrCreate(runId)
 
-    void this.execute(runId, workflow, agentMap, bus).catch((err) => {
+    void this.execute(runId, workflow, agentMap, bus, args.inputs).catch((err) => {
       console.error(`[workflow-runner] run ${runId} crashed:`, err)
       const msg = (err as Error).message
       this.deps.store.setRunStatus(runId, 'failed', { error: msg })
@@ -272,6 +294,7 @@ export class WorkflowRunner {
     workflow: Workflow,
     agentMap: Map<string, AgentDef>,
     bus: WorkflowRunBus,
+    inputs?: Record<string, string>,
   ): Promise<void> {
     this.deps.store.setRunStatus(runId, 'running')
     bus.emit({
@@ -334,7 +357,7 @@ export class WorkflowRunner {
         runId, stepIndex, stepId: step.id, agentId: agent.id, ts: Date.now(),
       })
 
-      const prompt = composePrompt(workflow, step, agent, prevOutput)
+      const prompt = composePrompt(workflow, step, agent, prevOutput, inputs)
       const ctx: StepContext = {
         workflow, agent, step,
         workflowRunId: runId, stepIndex,
