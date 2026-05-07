@@ -40,8 +40,8 @@ export interface WorkflowStep {
   id: string
   /** Agent id reference into the roster. */
   agentId: string
-  /** Free-text instruction shown in the composer. */
-  note: string
+  /** Free-text instruction shown in the composer (optional). */
+  note?: string
   /** Explicit next step id, or "end". Defaults to next list element. */
   next?: string
   /** Decision branches keyed by agent-emitted decision string. */

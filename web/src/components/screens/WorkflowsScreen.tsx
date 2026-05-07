@@ -76,30 +76,6 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
     updateActive({ steps: [...active.steps, step] })
   }
 
-  const removeStep = (idx: number) => {
-    if (!active) return
-    updateActive({ steps: active.steps.filter((_, i) => i !== idx) })
-  }
-
-  const moveStep = (idx: number, dir: -1 | 1) => {
-    if (!active) return
-    const swap = idx + dir
-    if (swap < 0 || swap >= active.steps.length) return
-    const next = active.steps.slice()
-    const a = next[idx]!
-    const b = next[swap]!
-    next[idx] = b
-    next[swap] = a
-    updateActive({ steps: next })
-  }
-
-  const updateStep = (idx: number, patch: Partial<WorkflowStep>) => {
-    if (!active) return
-    const next = active.steps.slice()
-    next[idx] = { ...next[idx]!, ...patch }
-    updateActive({ steps: next })
-  }
-
   const createNew = () => {
     const wf = newWorkflow()
     setWorkflows((prev) => [wf, ...prev])

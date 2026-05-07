@@ -1,0 +1,182 @@
+/* AgentsScreen — roster of reusable agent definitions, used as steps in
+   workflows. Card grid with kind-color accent + skill chips. */
+
+.agents-screen .page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.agents-screen .ph-icon { color: var(--accent); flex: 0 0 auto; }
+.agents-screen .ph-text { flex: 1; min-width: 0; }
+.agents-screen .ph-title { font-size: 15px; font-weight: 600; }
+.agents-screen .ph-sub  { font-size: 11px; opacity: 0.6; margin-top: 2px; }
+.agents-screen .ph-actions { display: flex; gap: 8px; }
+
+.agents-grid {
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  align-content: start;
+  overflow: auto;
+}
+
+.agent-card {
+  position: relative;
+  background: rgba(20, 22, 28, 0.6);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-left: 3px solid var(--k, #6b7280);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 100ms ease, box-shadow 120ms ease;
+}
+.agent-card:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+
+.agent-card-head {
+  display: flex; align-items: center; gap: 10px;
+}
+.agent-card-avatar {
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  background: var(--kbg, rgba(255,255,255,0.05));
+  color: var(--k, #6b7280);
+  flex: 0 0 auto;
+}
+.agent-card-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-card-id { margin-top: 2px; }
+.agent-card-kind {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--kbg);
+  color: var(--k);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, var(--k) 35%, transparent);
+}
+
+.agent-card-role {
+  font-size: 11.5px;
+  opacity: 0.85;
+  line-height: 1.45;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.agent-card-meta {
+  display: flex; gap: 6px;
+  font-size: 10px;
+  opacity: 0.55;
+}
+
+.agent-card-skills {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  min-height: 22px;
+}
+.agent-card-skills:empty::before {
+  content: 'no skills attached';
+  font-size: 10px; opacity: 0.4; font-style: italic;
+}
+.cd-skill-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  background: color-mix(in srgb, var(--k) 14%, transparent);
+  color: var(--k);
+  border: 1px solid color-mix(in srgb, var(--k) 32%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.agent-card-actions {
+  display: flex; gap: 6px;
+  margin-top: 4px;
+}
+.agent-card-actions .btn { font-size: 11px; padding: 4px 10px; }
+.agent-card-actions .agent-delete { margin-left: auto; color: rgba(248,113,113,0.85); }
+.agent-card-actions .agent-delete:hover { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.4); }
+
+.agents-empty {
+  grid-column: 1 / -1;
+  padding: 40px 16px;
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.55;
+}
+
+/* Modal — edit / create. */
+.agent-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.agent-modal {
+  width: 100%;
+  max-width: 600px;
+  max-height: calc(100vh - 48px);
+  background: var(--bg-elev, #14161c);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex; flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+}
+.agent-modal-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px; font-weight: 600;
+}
+.agent-modal-body {
+  flex: 1; min-height: 0; overflow: auto;
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.agent-modal-foot {
+  display: flex; gap: 8px; justify-content: flex-end;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+.agent-form-row { display: flex; flex-direction: column; gap: 4px; }
+.agent-form-row.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.agent-form-row.two > div { display: flex; flex-direction: column; gap: 4px; }
+.agent-form-row .kk-label-tiny {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.agent-input {
+  width: 100%;
+  background: var(--bg, #0c0d10);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-primary, #e6e6e9);
+  font-family: inherit;
+  resize: vertical;
+}
+.agent-input.mono { font-family: ui-monospace, Menlo, monospace; }
+.agent-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* mute/tiny utilities used by agent cards */
+.mono { font-family: ui-monospace, Menlo, monospace; }
+.tiny { font-size: 10px; }
+.mute { opacity: 0.55; }
+.kk-label-tiny {
+  font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; opacity: 0.6;
+}

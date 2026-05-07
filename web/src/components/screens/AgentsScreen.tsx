@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import '../../styles/agents.css'
 import { Icons } from '../icons/Icons'
 import {
   AGENT_KIND_META,

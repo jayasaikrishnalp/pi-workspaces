@@ -13,7 +13,7 @@
  * Card visual states are driven by CardState.status from the run hook;
  * edges highlight based on the run's progress (active → chosen → ghost).
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import '../../../styles/workflow-canvas.css'
 import { Icons } from '../../icons/Icons'

@@ -160,6 +160,9 @@ export function _resetSecretStoreForTests(): void {
  *   confluence.base_url   →  CONFLUENCE_BASE_URL + JIRA_URL + ATLASSIAN_URL
  *   jira.email            →  ATLASSIAN_EMAIL + JIRA_USERNAME
  *   jira.token            →  ATLASSIAN_API_TOKEN + JIRA_TOKEN + JIRA_API_TOKEN
+ *   <FLAT_KEY> (no dot)   →  <FLAT_KEY> verbatim if it matches POSIX env-var
+ *                            naming (so SNOW_USER, ORCA_API_TOKEN,
+ *                            KUBECONFIG, etc. land directly)
  *
  * Designed against a minimal interface so unit tests can pass a fake
  * `{ getByPrefix }` without instantiating the full SecretStore.
@@ -222,6 +225,20 @@ export function buildSecretEnv(store: SecretReader): Record<string, string> {
     env.ATLASSIAN_API_TOKEN = token
     env.JIRA_TOKEN = token
     env.JIRA_API_TOKEN = token
+  }
+
+  // Pass-through for flat keys (no dot in the name). The user can store
+  // `SNOW_USER`, `ORCA_API_TOKEN`, `KUBECONFIG`, etc. directly and they
+  // land in the env verbatim. We accept anything matching POSIX env-var
+  // naming rules so SecretStore stays a generic env-var bag rather than
+  // forcing every integration to live in a hard-coded if/else.
+  const all = store.getByPrefix('')
+  for (const [key, value] of Object.entries(all)) {
+    if (key.includes('.')) continue           // namespaced keys handled above
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue
+    if (typeof value !== 'string' || value.length === 0) continue
+    if (env[key] !== undefined) continue      // don't clobber a namespaced mapping
+    env[key] = value
   }
 
   return env

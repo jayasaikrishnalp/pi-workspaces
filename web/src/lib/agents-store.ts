@@ -28,61 +28,66 @@ export const DEFAULT_AGENT_ROSTER: Agent[] = [
     id: 'jira-agent', name: 'Jira Agent', kind: 'router',
     role: 'Pulls tickets and parses acceptance criteria',
     model: 'claude-haiku-4-5',
-    skills: ['jira.fetch-ticket', 'jira.parse-criteria', 'jira.assign-self', 'jira.comment'],
-    prompt: 'You are the Jira Agent. Given a ticket key, fetch the ticket, extract acceptance criteria, and emit a structured spec other agents can consume.',
+    skills: ['query-jira'],
+    prompt:
+      'You are the Jira Agent. Use the `query-jira` skill (curl + JIRA_URL/JIRA_USERNAME/JIRA_API_TOKEN env vars) ' +
+      'to fetch tickets, parse acceptance criteria, and emit a structured spec the next agent can consume.',
   },
   {
     id: 'spec-design-agent', name: 'Spec Design Agent', kind: 'writer',
     role: 'Turns ticket criteria into a SPEC.md',
     model: 'claude-sonnet-4-5',
-    skills: ['spec.write', 'spec.diagram-mermaid', 'spec.acceptance-grid'],
+    skills: ['spec-driven-development', 'writing-plans'],
     prompt: 'You are the Spec Design Agent. Convert acceptance criteria into a SPEC.md with sections: Goal, Non-goals, User stories, API surface, Acceptance grid.',
   },
   {
     id: 'coding-agent', name: 'Coding Agent', kind: 'specialist',
     role: 'Spec-Driven implementation',
     model: 'claude-sonnet-4-5',
-    skills: ['fs.create-repo', 'git.commit', 'code.scaffold-react', 'code.write-tests'],
+    skills: ['spec-driven-development', 'codex'],
     prompt: 'You are the Coding Agent. Practice Spec-Driven Development: read SPEC.md, scaffold a repo, write the smallest implementation that satisfies the acceptance grid, commit per step.',
   },
   {
     id: 'code-review-agent', name: 'Code Review Agent', kind: 'reviewer',
     role: 'Reviews diff; routes back issues or approves',
     model: 'claude-sonnet-4-5',
-    skills: ['code.read-diff', 'code.lint-policy', 'code.check-tests', 'code.route-back'],
+    skills: ['codex'],
     prompt: 'You are the Code Review Agent. Review the diff against SPEC.md and team policy. Emit numbered issues OR APPROVED. Route back to coding-agent on issues.',
   },
   {
     id: 'l1-triage-agent', name: 'L1 Triage Agent', kind: 'router',
     role: 'Validates incoming requests; gathers CMDB context',
     model: 'claude-haiku-4-5',
-    skills: ['cmdb.lookup-host', 'owner.resolve', 'policy.gate-check', 'snapshot.state'],
+    skills: ['query-servicenow', 'connecting-to-wk-aws'],
     prompt: 'You are the L1 Triage Agent. For any incoming request: resolve the host in CMDB, find its owner, run a policy gate-check (prod windows, dependency map, frozen tags), and snapshot the current state. Emit a structured triage report. Refuse if policy fails.',
   },
   {
     id: 'servicenow-agent', name: 'ServiceNow Agent', kind: 'reviewer',
     role: 'Files CHG; routes to CAB; returns approve / no-approve',
     model: 'claude-sonnet-4-5',
-    skills: ['snow.create-chg', 'snow.attach-evidence', 'snow.poll-approval', 'snow.comment'],
+    skills: ['query-servicenow'],
     prompt: "You are the ServiceNow Agent. File a Change Request with the triage report attached, route it to the correct CAB group, then poll until a decision lands. Emit { decision: 'approve' | 'no-approve', chg_number, approver, reason }. On no-approve, halt the workflow.",
   },
   {
     id: 'aws-agent', name: 'AWS Agent', kind: 'operator',
     role: 'Executes AWS actions (server deletion, snapshot, EIP/ENI cleanup)',
     model: 'claude-sonnet-4-5',
-    skills: ['aws.ec2-stop', 'aws.ec2-snapshot', 'aws.ec2-terminate', 'aws.eni-release', 'aws.eip-release', 'aws.audit-log'],
+    skills: ['connecting-to-wk-aws'],
     prompt: 'You are the AWS Agent. Only act after ServiceNow approves. Sequence: stop → snapshot (retain 30d) → terminate → release ENI/EIP. Log every API call to CloudTrail-tagged audit. If any step fails, roll back what you can and emit a structured failure report.',
   },
   {
     id: 'deploy-agent', name: 'Deploy Agent', kind: 'operator',
     role: 'Build, deploy, smoke-test, post URL',
     model: 'claude-haiku-4-5',
-    skills: ['build.pnpm', 'deploy.vercel', 'test.smoke', 'jira.comment'],
+    skills: ['connecting-to-wk-aws', 'query-jira'],
     prompt: 'You are the Deploy Agent. After review approves, run build, push to staging, smoke-test, and comment back on the originating Jira ticket.',
   },
 ]
 
-const STORAGE_KEY = 'hive.agents.v1'
+// Bump to v2 so users with stale localStorage from before the skill→SKILL.md
+// rename get the fresh default roster (skills now point at real SKILL.md
+// filenames like `query-jira` instead of synthetic `jira.fetch-ticket` refs).
+const STORAGE_KEY = 'hive.agents.v2'
 
 export function loadAgents(): Agent[] {
   try {

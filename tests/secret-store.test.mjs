@@ -232,6 +232,59 @@ test('buildSecretEnv: partial atlassian config emits only configured vars', () =
   assert.equal(env.ATLASSIAN_EMAIL, undefined)
 })
 
+test('buildSecretEnv: flat keys (no dot) pass through verbatim into the env', () => {
+  const data = {
+    'SNOW_USER': 'cloudops_api',
+    'SNOW_PASS': 'p@ss',
+    'SNOW_INSTANCE': 'mycorp.service-now.com',
+    'ORCA_API_TOKEN': 'orca-tok',
+    'ORCA_API_URL': 'https://api.orcasecurity.io/api',
+    'API_PATH': '/v2',
+    'KUBECONFIG': '/etc/kube/config',
+    // Should be ignored: not POSIX-name-shaped
+    '123_BAD': 'rejected',
+    'has space': 'rejected',
+    // Should be ignored: namespaced (handled by aws/azure/jira/confluence branches)
+    'aws.access_key_id': 'AKIA...',
+  }
+  const fake = { getByPrefix: (p) => {
+    if (p === '') return data
+    if (p === 'aws.') return { 'aws.access_key_id': data['aws.access_key_id'] }
+    return {}
+  }}
+  const env = buildSecretEnv(fake)
+  assert.equal(env.SNOW_USER, 'cloudops_api')
+  assert.equal(env.SNOW_PASS, 'p@ss')
+  assert.equal(env.SNOW_INSTANCE, 'mycorp.service-now.com')
+  assert.equal(env.ORCA_API_TOKEN, 'orca-tok')
+  assert.equal(env.ORCA_API_URL, 'https://api.orcasecurity.io/api')
+  assert.equal(env.API_PATH, '/v2')
+  assert.equal(env.KUBECONFIG, '/etc/kube/config')
+  // Bad-shape keys filtered out
+  assert.equal(env['123_BAD'], undefined)
+  assert.equal(env['has space'], undefined)
+  // Namespaced key still mapped via the aws.* branch
+  assert.equal(env.AWS_ACCESS_KEY_ID, 'AKIA...')
+  // The literal `aws.access_key_id` is NOT in env (the dot fails the regex anyway)
+  assert.equal(env['aws.access_key_id'], undefined)
+})
+
+test('buildSecretEnv: flat keys do not clobber namespaced mappings', () => {
+  // If both 'jira.token' and a literal 'JIRA_TOKEN' are stored, the
+  // namespaced mapping wins (it maps to the same env var name).
+  const data = {
+    'jira.token': 'from-namespaced',
+    'JIRA_TOKEN': 'from-flat',
+  }
+  const fake = { getByPrefix: (p) => {
+    if (p === '') return data
+    if (p === 'jira.') return { 'jira.token': data['jira.token'] }
+    return {}
+  }}
+  const env = buildSecretEnv(fake)
+  assert.equal(env.JIRA_TOKEN, 'from-namespaced')
+})
+
 test('SecretStore emits "change" on setSecret', async () => {
   const s = new SecretStore({ workspaceRoot: tmpRoot() })
   await s.load()
