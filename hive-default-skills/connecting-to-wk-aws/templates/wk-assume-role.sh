@@ -48,6 +48,17 @@ if ! command -v aws >/dev/null 2>&1; then
     fi
 fi
 
+# --- Step 0.4: Drop any stale session token --------------------------------
+# Always start a new session. AWS_SESSION_TOKEN may have been:
+#   • inherited from a previous assume-role in the same Hive process
+#   • left over in the secret store under aws.session_token (junk / expired)
+#   • set by an unrelated tool earlier in the shell
+# Any of those will silently poison `aws sts get-caller-identity` below
+# with InvalidClientTokenId / ExpiredToken. Drop it FIRST — before any STS
+# call, before resolving master creds. This must be the first thing this
+# script does after the install check.
+unset AWS_SESSION_TOKEN
+
 # --- Step 0.5: Resolve master credentials ---------------------------------
 # Prefer env vars (Hive Secret Store path). Fall back to ~/.aws/credentials
 # [WK-PROFILE]. Bail loudly when neither is available.
@@ -72,10 +83,7 @@ FEDROLES_TABLE="WK-FedRoles"
 # epoch + $RANDOM stays unique even when two callers fire in the same second.
 SESSION_NAME="wk-${USER:-pi}-$(date +%s)-${RANDOM}"
 
-# Drop any stale assumed-role token from a previous invocation. Without this,
-# an expired AWS_SESSION_TOKEN inherited from the parent shell will be carried
-# into the new sts:AssumeRole call and break it (InvalidClientTokenId).
-unset AWS_SESSION_TOKEN
+# AWS_SESSION_TOKEN was already unset at Step 0.4 (top of script).
 
 # --- Input Validation ---
 ACCOUNT_NUMBER="${1:-}"

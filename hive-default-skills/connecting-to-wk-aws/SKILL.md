@@ -109,7 +109,21 @@ shared credentials file. Hive populates `AWS_ACCESS_KEY_ID` and
 `AWS_SECRET_ACCESS_KEY` from the secret store automatically when those entries
 exist (`aws.access_key_id`, `aws.secret_access_key`).
 
+**ALWAYS unset the inherited session token first — before any STS call.**
+A stale `AWS_SESSION_TOKEN` (from a previous assume-role, an expired session,
+or a junk value in the secret store under `aws.session_token`) will silently
+poison `aws sts get-caller-identity` with `InvalidClientTokenId` *even when
+the master keys are valid*. Drop the token before authenticating; start a
+fresh session every time. This is non-negotiable — the workflow has been
+broken by this exact bug before, and you will hit it again if you skip it.
+
 ```bash
+# DROP STALE SESSION TOKEN FIRST — before any sts / assume-role call.
+# An inherited token (from a prior assume-role, an expired session, or a
+# bad value in the secret store) makes every downstream call return
+# InvalidClientTokenId / ExpiredToken. Always unset and start a new session.
+unset AWS_SESSION_TOKEN
+
 # Confirm we can call AWS as the master account before proceeding.
 # Branch behavior:
 #   • env vars present → use them directly (no --profile flag)
@@ -240,16 +254,23 @@ done
 
 ## Important Notes
 
-1. **Master credentials come from env vars** — Hive populates them from the
+1. **ALWAYS `unset AWS_SESSION_TOKEN` BEFORE any STS / assume-role call** —
+   this is the #1 cause of silent breakage in this skill. A stale token
+   inherited from a previous step, an expired session, or junk left in the
+   secret store under `aws.session_token` will poison every downstream call
+   (`InvalidClientTokenId`) even when the master keys themselves are valid.
+   Run `unset AWS_SESSION_TOKEN` as the *first line* of every Bash invocation
+   that talks to AWS — Step 0.5 and Step 2 both show this pattern, and the
+   helper script `wk-assume-role.sh` does it at the very top.
+2. **Master credentials come from env vars** — Hive populates them from the
    secret store. The `WK-PROFILE` file is the legacy fallback only.
-2. **Never use `--profile` flags in target operations** — once the role is
+3. **Never use `--profile` flags in target operations** — once the role is
    assumed via Step 2, the temporary credentials are in env vars and the CLI
    uses them automatically. A `--profile` flag would override and break it.
-3. **DynamoDB lookup runs as the master account** — Steps 0.5 and 1 use the
+4. **DynamoDB lookup runs as the master account** — Steps 0.5 and 1 use the
    master credentials (env vars or `WK-PROFILE`). Step 2 swaps them for the
    assumed role; that's why Step 1 must run *before* Step 2 in the same call.
-4. **Default to Operations role** unless the task specifically requires another role type.
-5. **Always combine assume-role + commands in a single Bash call** to prevent credential loss between shell invocations.
-6. **STS sessions are temporary (1 hour)** — `unset` the assumed-role env vars and re-run Step 0.5 + Step 2 to get a fresh hour.
-7. **Always `unset AWS_SESSION_TOKEN` before `aws sts assume-role`** — a stale token from a previous invocation will be inherited and silently break the new STS call (`InvalidClientTokenId`). The skill now does this in every assume-role example; do the same in any custom flow.
+5. **Default to Operations role** unless the task specifically requires another role type.
+6. **Always combine assume-role + commands in a single Bash call** to prevent credential loss between shell invocations.
+7. **STS sessions are temporary (1 hour)** — `unset` the assumed-role env vars and re-run Step 0.5 + Step 2 to get a fresh hour.
 8. **Never reuse `--role-session-name`** — a fixed value like `wk-session` collapses parallel agent runs into a single CloudTrail principal, destroying audit attribution and risking STS rate-limit/race issues. Use the `wk-${USER:-pi}-$(date +%s)-${RANDOM}` formula (or another guaranteed-unique scheme).
