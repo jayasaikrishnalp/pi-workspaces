@@ -4,7 +4,7 @@ import { Icons, Logo } from './icons/Icons'
 export type ScreenId =
   | 'dashboard' | 'chat' | 'terminal' | 'jobs' | 'tasks'
   | 'workflows' | 'teams'
-  | 'graph' | 'kb' | 'memory' | 'skills' | 'confluence' | 'mcp' | 'souls'
+  | 'graph' | 'kb' | 'memory' | 'skills' | 'confluence' | 'mcp' | 'agents'
   | 'secrets'
   | 'sessions'
 
@@ -18,6 +18,7 @@ interface Props {
   teamsCount?: number
   workflowsCount?: number
   wikiCount?: number
+  agentsCount?: number
   recentSessions?: Array<{ id: string; title: string; ago: string }>
   onCommandPalette?: () => void
   onSettings?: () => void
@@ -69,7 +70,7 @@ function SidebarGroup({ label, defaultOpen = true, children }: SidebarGroupProps
 }
 
 export function Sidebar(props: Props): JSX.Element {
-  const { active, onPick, collapsed, setCollapsed, skillCount, taskCount, teamsCount, workflowsCount, wikiCount, recentSessions = [], onCommandPalette } = props
+  const { active, onPick, collapsed, setCollapsed, skillCount, taskCount, teamsCount, workflowsCount, wikiCount, agentsCount, recentSessions = [], onCommandPalette } = props
 
   if (collapsed) {
     return (
@@ -168,7 +169,13 @@ export function Sidebar(props: Props): JSX.Element {
         <SidebarItem icon={<Icons.search size={14} />} label="Confluence" active={active === 'confluence'} onClick={() => onPick('confluence')} />
         <SidebarItem icon={<Icons.mcp size={14} />} label="MCP" active={active === 'mcp'} onClick={() => onPick('mcp')} />
         <SidebarItem icon={<span style={{fontSize:14}}>🔑</span>} label="Secrets" active={active === 'secrets'} onClick={() => onPick('secrets')} />
-        <SidebarItem icon={<Icons.profiles size={14} />} label="Souls" active={active === 'souls'} onClick={() => onPick('souls')} />
+        <SidebarItem
+          icon={<Icons.profiles size={14} />}
+          label="Agents"
+          active={active === 'agents'}
+          onClick={() => onPick('agents')}
+          badge={agentsCount ? <span className="sb-num">{agentsCount}</span> : null}
+        />
       </SidebarGroup>
 
       <SidebarGroup label="SESSIONS">

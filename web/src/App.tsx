@@ -10,7 +10,8 @@ import { ChatScreen } from './components/screens/ChatScreen'
 import { GraphScreen } from './components/screens/GraphScreen'
 import { KnowledgeBaseScreen } from './components/screens/KnowledgeBaseScreen'
 import { SkillsScreen } from './components/screens/SkillsScreen'
-import { SoulsScreen } from './components/screens/SoulsScreen'
+import { AgentsScreen } from './components/screens/AgentsScreen'
+import { loadAgents, saveAgents, type Agent } from './lib/agents-store'
 import { MemoryScreen } from './components/screens/MemoryScreen'
 import { JobsScreen } from './components/screens/JobsScreen'
 import { TasksScreen } from './components/screens/TasksScreen'
@@ -41,7 +42,7 @@ const STORAGE = {
 function loadActive(): ScreenId {
   const v = localStorage.getItem(STORAGE.active)
   // Migrate dropped/renamed screens to their replacements.
-  const migrated: Record<string, ScreenId> = { files: 'dashboard', ops: 'dashboard', conductor: 'workflows', swarm: 'teams' }
+  const migrated: Record<string, ScreenId> = { files: 'dashboard', ops: 'dashboard', conductor: 'workflows', swarm: 'teams', souls: 'agents' }
   if (v && migrated[v]) return migrated[v]!
   return (v as ScreenId | null) ?? 'dashboard'
 }
@@ -60,6 +61,8 @@ export function App(): JSX.Element {
   const [active, setActive] = useState<ScreenId>(loadActive)
   const [collapsed, setCollapsed] = useState<boolean>(loadCollapsed)
   const [vibe, setVibe] = useState<string>(loadVibe)
+  const [agents, setAgents] = useState<Agent[]>(loadAgents)
+  useEffect(() => { saveAgents(agents) }, [agents])
   const probeState = useApi('probe', probe)
   const sessionsState = useApi('app.sessions', listSessions)
 
@@ -136,6 +139,7 @@ export function App(): JSX.Element {
         taskCount={tasksCount}
         workflowsCount={workflowsCount}
         wikiCount={wikiCount}
+        agentsCount={agents.length}
         recentSessions={recentSessions}
         onCommandPalette={() => setCmdkOpen(true)}
         onSettings={() => setSettingsOpen(true)}
@@ -155,7 +159,7 @@ export function App(): JSX.Element {
             : active === 'graph'     ? <GraphScreen />
             : active === 'kb'        ? <KnowledgeBaseScreen />
             : active === 'skills'    ? <SkillsScreen />
-            : active === 'souls'     ? <SoulsScreen />
+            : active === 'agents'    ? <AgentsScreen roster={agents} setRoster={setAgents} />
             : active === 'memory'    ? <MemoryScreen />
             : active === 'jobs'      ? <JobsScreen />
             : active === 'tasks'     ? <TasksScreen />
@@ -194,7 +198,7 @@ function titleFor(id: ScreenId): string {
     dashboard: 'dashboard', chat: 'chat', terminal: 'terminal',
     jobs: 'jobs', tasks: 'tasks', workflows: 'workflows', teams: 'teams',
     graph: 'dag', kb: 'knowledge.base', memory: 'memory', skills: 'skills', confluence: 'confluence',
-    mcp: 'mcp', secrets: 'secrets', souls: 'souls', sessions: 'sessions',
+    mcp: 'mcp', secrets: 'secrets', agents: 'agents', sessions: 'sessions',
   }
   return m[id]
 }

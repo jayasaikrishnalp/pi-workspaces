@@ -16,7 +16,7 @@ const SCREEN_ITEMS: Array<{ id: ScreenId; label: string }> = [
   { id: 'chat',      label: 'Chat' },
   { id: 'graph',     label: 'Knowledge Graph' },
   { id: 'skills',    label: 'Skills' },
-  { id: 'souls',     label: 'Souls' },
+  { id: 'agents',    label: 'Agents' },
   { id: 'memory',    label: 'Memory' },
   { id: 'workflows', label: 'Workflows' },
   { id: 'jobs',      label: 'Jobs' },
@@ -55,7 +55,7 @@ export function CommandPalette({ open, onClose, onPick }: Props): JSX.Element | 
       onPick: () => {
         if (r.name && (r.kind === 'skill' || r.kind === 'soul' || r.kind === 'memory' || r.kind === 'agent' || r.kind === 'workflow')) {
           // navigate to the kind's screen
-          const target: Record<string, ScreenId> = { skill: 'skills', soul: 'souls', memory: 'memory', agent: 'graph', workflow: 'graph' }
+          const target: Record<string, ScreenId> = { skill: 'skills', soul: 'agents', memory: 'memory', agent: 'agents', workflow: 'graph' }
           onPick(target[r.kind] ?? 'graph')
         }
         onClose()
