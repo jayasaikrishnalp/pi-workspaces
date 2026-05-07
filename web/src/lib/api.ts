@@ -269,8 +269,16 @@ export const listWorkflowRuns = (workflowId?: string) => {
 }
 export const getWorkflowRun = (runId: string) =>
   api.get<{ run: WorkflowRun; steps: WorkflowStepRun[] }>(`/api/workflow-runs/${runId}`)
-export const startWorkflowRun = (workflow: WfSchema, agents: AgentSchema[], triggeredBy = 'operator') =>
-  api.post<{ runId: string }>(`/api/workflow-runs`, { workflow, agents, triggeredBy })
+export const startWorkflowRun = (
+  workflow: WfSchema,
+  agents: AgentSchema[],
+  triggeredBy = 'operator',
+  /** Initial values for workflow.inputs — keyed by input field name. The
+   *  backend wires these into the first step's prompt so the agent sees
+   *  e.g. ritm_number="RITM1873427". Optional for back-compat. */
+  inputs?: Record<string, string>,
+) =>
+  api.post<{ runId: string }>(`/api/workflow-runs`, { workflow, agents, triggeredBy, inputs })
 export const cancelWorkflowRun = (runId: string) =>
   api.post<{ ok: boolean }>(`/api/workflow-runs/${runId}/cancel`, {})
 export const workflowRunEventsUrl = (runId: string) =>

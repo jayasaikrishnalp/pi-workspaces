@@ -18,6 +18,19 @@ function iconFor(name: string) {
   return all[name] ?? all.swarm
 }
 
+/** True when every required workflow input has a non-empty value. Optional
+ *  fields can be left blank — the agent prompt should describe sensible
+ *  defaults. */
+function areInputsValid(workflow: Workflow, draft: Record<string, string> | undefined): boolean {
+  if (!workflow.inputs || workflow.inputs.length === 0) return true
+  for (const f of workflow.inputs) {
+    if (!f.required) continue
+    const v = draft?.[f.name]
+    if (!v || !v.trim()) return false
+  }
+  return true
+}
+
 interface Props {
   /** Notifies the parent (App.tsx) when a run is in flight so it can lock chat. */
   onRunStateChange?: (info: { running: boolean; workflowName: string | null; activeStepId: string | null }) => void
@@ -33,6 +46,10 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
   const [reconcileMsg, setReconcileMsg] = useState<string | null>(null)
   const [knownSkills, setKnownSkills] = useState<Set<string>>(new Set())
   const [openStepId, setOpenStepId] = useState<string | null>(null)
+  // Per-workflow input values, keyed by workflowId → fieldName → value. The
+  // user fills this when the active workflow has declared `inputs`. The
+  // values are submitted with run() so the first agent sees them.
+  const [inputDrafts, setInputDrafts] = useState<Record<string, Record<string, string>>>({})
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Persist on every change.
@@ -352,12 +369,50 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
                 ) : (
                   <button
                     className="wf-action-btn wf-action-primary"
-                    disabled={starting || active.steps.length === 0}
-                    onClick={() => { void run() }}
+                    disabled={starting || active.steps.length === 0 || !areInputsValid(active, inputDrafts[active.id])}
+                    onClick={() => { void run(inputDrafts[active.id] ?? {}) }}
                     data-testid="wf-run"
+                    title={!areInputsValid(active, inputDrafts[active.id]) ? 'Fill required workflow inputs first' : 'Run this workflow'}
                   >▸ Run</button>
                 )}
               </div>
+
+              {/* Workflow start prompt — shown when the workflow declares any
+                  inputs. The user fills these before clicking Run. */}
+              {(active.inputs?.length ?? 0) > 0 ? (
+                <div className="wf-inputs-panel" data-testid="wf-inputs-panel">
+                  <div className="wf-inputs-head">
+                    <span className="wf-inputs-label">Start prompt — workflow inputs</span>
+                    <span className="wf-inputs-hint">These values are passed to the first agent at run time. Required fields marked *.</span>
+                  </div>
+                  <div className="wf-inputs-grid">
+                    {active.inputs!.map((f) => {
+                      const v = inputDrafts[active.id]?.[f.name] ?? ''
+                      const required = f.required === true
+                      return (
+                        <label className="wf-inputs-field" key={f.name} data-testid={`wf-input-${f.name}`}>
+                          <span className="wf-inputs-name">
+                            {f.name}{required ? <span className="wf-inputs-required">*</span> : null}
+                            <span className="wf-inputs-type">{f.type}</span>
+                          </span>
+                          <input
+                            className="wf-inputs-input"
+                            type="text"
+                            value={v}
+                            placeholder={f.desc ?? `Enter ${f.name}…`}
+                            onChange={(e) => {
+                              const next = { ...(inputDrafts[active.id] ?? {}), [f.name]: e.target.value }
+                              setInputDrafts((d) => ({ ...d, [active.id]: next }))
+                            }}
+                          />
+                          {f.desc ? <span className="wf-inputs-desc">{f.desc}</span> : null}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
               {startError ? <div className="chat-msg-error" data-testid="wf-start-error" style={{ marginTop: 8 }}>{startError}</div> : null}
             </div>
 

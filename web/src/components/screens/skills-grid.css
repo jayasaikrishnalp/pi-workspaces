@@ -1,0 +1,256 @@
+/* Skills page — Railway-style smooth-box card grid.
+   Goal: dark glass cards, generous radius, subtle border, hover lift,
+   monospace name + 2-line clamped description. */
+
+.skills-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: var(--bg-primary, #0c0d10);
+}
+
+.skills-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 28px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.skills-header-titles { flex: 1; min-width: 0; }
+.skills-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary, #fff);
+}
+.skills-sub {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.skills-sub code {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.skills-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.skills-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  width: 240px;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.skills-search:focus-within {
+  border-color: rgba(29, 172, 254, 0.45);
+  background: rgba(29, 172, 254, 0.04);
+}
+.skills-search svg { color: rgba(255, 255, 255, 0.4); }
+.skills-search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary, #fff);
+  font-size: 12.5px;
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+}
+.skills-search input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.skills-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: rgba(29, 172, 254, 0.14);
+  border: 1px solid rgba(29, 172, 254, 0.4);
+  border-radius: 8px;
+  color: var(--accent, #1dacfe);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.skills-new-btn:hover {
+  background: rgba(29, 172, 254, 0.22);
+  border-color: var(--accent, #1dacfe);
+  transform: translateY(-1px);
+}
+
+.skills-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+  padding: 60px 28px;
+  text-align: center;
+}
+
+/* Card grid — auto-fit columns, dense rows of smooth boxes. */
+.skills-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 28px 32px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  align-content: start;
+}
+
+.skill-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(22, 24, 30, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  color: var(--text-primary, #fff);
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.025) inset,
+    0 8px 18px rgba(0, 0, 0, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+.skill-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at top right, rgba(29, 172, 254, 0.10) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.skill-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(29, 172, 254, 0.4);
+  background: rgba(28, 30, 36, 0.92);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 14px 28px rgba(0, 0, 0, 0.5),
+    0 0 24px rgba(29, 172, 254, 0.12);
+}
+.skill-card:hover::before { opacity: 1; }
+.skill-card:active { transform: translateY(0); }
+
+.skill-card-icon {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(29, 172, 254, 0.10);
+  color: var(--accent, #1dacfe);
+  border: 1px solid rgba(29, 172, 254, 0.18);
+}
+
+.skill-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.skill-card-name {
+  font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.skill-card-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.6);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-wrap: break-word;
+}
+.skill-card-desc-empty {
+  color: rgba(255, 255, 255, 0.3);
+  font-style: italic;
+}
+
+.skill-card-chev {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.3);
+  align-self: center;
+  transition: transform 140ms ease, color 140ms ease;
+}
+.skill-card:hover .skill-card-chev {
+  color: var(--accent, #1dacfe);
+  transform: translateX(3px);
+}
+
+/* Skill editor pane — when a card is clicked, open the existing editor as a
+   modal sheet instead of an inline 2-col layout. The kb-modal-shade comes
+   from the existing global styles. */
+.skill-editor-pane {
+  width: min(720px, 92vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(20, 22, 28, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.skill-editor-pane .kb-editor {
+  padding: 20px 22px;
+  overflow-y: auto;
+}
+.skill-editor-pane .kb-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 14px;
+}
+.skill-editor-pane .kb-editor-head h3 {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  flex: 1;
+}

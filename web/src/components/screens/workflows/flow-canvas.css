@@ -111,11 +111,30 @@
   animation: fc-node-pulse 2s ease-in-out infinite;
 }
 .fc-node[data-status="completed"] {
-  border-left: 3px solid #7ac88c;
+  background: rgba(122, 200, 140, 0.10);
+  border-color: rgba(122, 200, 140, 0.55);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.03) inset,
+    0 12px 28px rgba(0,0,0,0.5),
+    0 0 24px rgba(122, 200, 140, 0.10);
+}
+.fc-node[data-status="completed"] .fc-node-title::before {
+  content: "✓ ";
+  color: #7ac88c;
+  font-weight: 700;
 }
 .fc-node[data-status="failed"] {
-  border-color: rgba(248,113,113,0.45);
-  background: rgba(40,16,16,0.85);
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.55);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.03) inset,
+    0 12px 28px rgba(0,0,0,0.5),
+    0 0 24px rgba(248, 113, 113, 0.12);
+}
+.fc-node[data-status="failed"] .fc-node-title::before {
+  content: "✕ ";
+  color: #f87171;
+  font-weight: 700;
 }
 
 @keyframes fc-node-pulse {
@@ -1011,5 +1030,88 @@
   flex: 1;
   min-height: 0;
   position: relative;
+}
+
+/* ===== Workflow inputs panel — the "start prompt" the user fills before Run ===== */
+.wf-inputs-panel {
+  margin-top: 12px;
+  padding: 12px 14px 14px;
+  background: rgba(29, 172, 254, 0.04);
+  border: 1px solid rgba(29, 172, 254, 0.20);
+  border-radius: 10px;
+}
+.wf-inputs-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.wf-inputs-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent, #1dacfe);
+  font-weight: 600;
+}
+.wf-inputs-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.wf-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.wf-inputs-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wf-inputs-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.wf-inputs-required {
+  color: #f87171;
+  font-weight: 700;
+  margin-left: 1px;
+}
+.wf-inputs-type {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(29, 172, 254, 0.10);
+  color: rgba(29, 172, 254, 0.85);
+  border: 1px solid rgba(29, 172, 254, 0.20);
+}
+.wf-inputs-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 120ms ease, background 120ms ease;
+  box-sizing: border-box;
+}
+.wf-inputs-input:focus {
+  border-color: var(--accent, #1dacfe);
+  background: rgba(29, 172, 254, 0.06);
+}
+.wf-inputs-input::placeholder { color: rgba(255, 255, 255, 0.32); }
+.wf-inputs-desc {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.4);
+  line-height: 1.4;
 }
 

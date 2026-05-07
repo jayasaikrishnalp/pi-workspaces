@@ -135,6 +135,18 @@ export function ChatScreen({ onSaveSkill, lockedReason }: Props = {}): JSX.Eleme
     setSeedNonce((n) => n + 1)
   }
 
+  // Cross-component seeding: scheduled-job "Run now" dispatches a hive:chat-seed
+  // event with the prompt text. App switches to this screen, then fires the
+  // event after a tick so we're mounted.
+  useEffect(() => {
+    const onSeedEvent = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { text?: string } | undefined
+      if (detail?.text) seedComposer(detail.text)
+    }
+    window.addEventListener('hive:chat-seed', onSeedEvent)
+    return () => window.removeEventListener('hive:chat-seed', onSeedEvent)
+  }, [])
+
   return (
     <div className={`chat-screen ${sidebarOpen ? 'with-sidebar' : 'no-sidebar'}`} data-testid="chat">
       {sidebarOpen ? (

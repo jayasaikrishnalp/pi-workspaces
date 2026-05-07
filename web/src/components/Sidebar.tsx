@@ -70,7 +70,7 @@ function SidebarGroup({ label, defaultOpen = true, children }: SidebarGroupProps
 }
 
 export function Sidebar(props: Props): JSX.Element {
-  const { active, onPick, collapsed, setCollapsed, skillCount, taskCount, teamsCount, workflowsCount, wikiCount, agentsCount, recentSessions = [], onCommandPalette } = props
+  const { active, onPick, collapsed, setCollapsed, skillCount, teamsCount, workflowsCount, wikiCount, agentsCount, recentSessions = [], onCommandPalette } = props
 
   if (collapsed) {
     return (
@@ -84,7 +84,6 @@ export function Sidebar(props: Props): JSX.Element {
           { id: 'teams', icon: <Icons.swarm size={16} /> },
           { id: 'graph', icon: <Icons.graph size={16} /> },
           { id: 'workflows', icon: <Icons.conductor size={16} /> },
-          { id: 'tasks', icon: <Icons.tasks size={16} /> },
           { id: 'jobs', icon: <Icons.jobs size={16} /> },
         ] as const).map((t) => (
           <button
@@ -120,13 +119,6 @@ export function Sidebar(props: Props): JSX.Element {
         <SidebarItem icon={<Icons.dashboard size={14} />} label="Dashboard" active={active === 'dashboard'} onClick={() => onPick('dashboard')} />
         <SidebarItem icon={<Icons.chat size={14} />} label="Chat" active={active === 'chat'} onClick={() => onPick('chat')} />
         <SidebarItem icon={<Icons.jobs size={14} />} label="Jobs" active={active === 'jobs'} onClick={() => onPick('jobs')} />
-        <SidebarItem
-          icon={<Icons.tasks size={14} />}
-          label="Tasks"
-          active={active === 'tasks'}
-          onClick={() => onPick('tasks')}
-          badge={taskCount ? <span className="sb-num">{taskCount}</span> : null}
-        />
         <SidebarItem
           icon={<Icons.conductor size={14} />}
           label="Workflows"

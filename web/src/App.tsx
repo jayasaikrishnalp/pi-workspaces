@@ -83,6 +83,23 @@ export function App(): JSX.Element {
   }, [])
   const dismissToast = useCallback((id: string) => setToasts((arr) => arr.filter((x) => x.id !== id)), [])
 
+  // Wire the "Run now" button on Scheduled Jobs: switch to the chat screen
+  // and re-broadcast the prompt as a seed for the Composer to pick up.
+  useEffect(() => {
+    const onRunJob = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { prompt?: string; skills?: string[]; name?: string } | undefined
+      if (!detail?.prompt) return
+      setActive('chat')
+      pushToast({ kind: 'info', title: `Running "${detail.name ?? 'job'}"`, message: 'Prompt loaded into chat. Hit Send to dispatch.' })
+      // Defer the seed event to the next tick so ChatScreen has mounted.
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('hive:chat-seed', { detail: { text: detail.prompt, skills: detail.skills } }))
+      }, 50)
+    }
+    window.addEventListener('hive:run-job', onRunJob)
+    return () => window.removeEventListener('hive:run-job', onRunJob)
+  }, [pushToast])
+
   useEffect(() => {
     document.body.className = vibe === 'default' ? '' : `vibe-${vibe}`
     localStorage.setItem(STORAGE.vibe, vibe)

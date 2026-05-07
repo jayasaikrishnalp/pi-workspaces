@@ -103,53 +103,141 @@ export const DEFAULT_AGENT_ROSTER: Agent[] = [
   },
   {
     id: 'l1-triage-agent', name: 'L1 Triage Agent', kind: 'router',
-    role: 'Validates incoming requests; gathers CMDB context',
+    role: 'Routes incoming requests — server actions (CMDB triage) or RITMs (catalog request triage)',
     model: 'claude-haiku-4-5',
     skills: ['query-servicenow', 'connecting-to-wk-aws'],
-    prompt: 'You are the L1 Triage Agent. For any incoming request: resolve the host in CMDB, find its owner, run a policy gate-check (prod windows, dependency map, frozen tags), and snapshot the current state. Emit a structured triage report. Refuse if policy fails.',
+    prompt:
+      'You are the L1 Triage Agent. You handle two modes — pick the one that matches the inputs you receive.\n\n' +
+      'MODE A — server action (host + request_type given):\n' +
+      '  Resolve the host in CMDB via `find_server`, find its owner via `find_user`, run a policy gate-check (prod windows, dependency map, frozen tags via `get_changes_for_host`), snapshot current state. Emit a structured triage_report. Refuse if policy fails. Decision: `proceed` | `refuse`.\n\n' +
+      'MODE B — RITM fulfilment (ritm_number given):\n' +
+      '  Read the RITM via `get_ritm` (include catalog variables). Parse the ask (e.g. "create EC2 in account 543566088985"). Identify the cloud provider (aws | azure) from the description. Determine mandatory fields for the action. List which mandatory fields are PRESENT and which are MISSING. Emit `parsed_ritm` (json with all parsed fields), `cloud` (aws | azure), `missing_fields` (string[]), and decision: `complete` (no missing fields → next agent can proceed) | `missing` (mandatory fields missing → ServiceNow Agent should post a work_notes asking for them and stop the workflow).\n\n' +
+      'MODE C — summary (instance_id + status given AFTER fulfilment):\n' +
+      '  Write a concise markdown summary the user can read in Slack. Include the RITM number, instance details, what was done, and any next steps. Emit `summary` (markdown).\n\n' +
+      'Always pick MODE B when ritm_number is provided; MODE A when host + request_type are provided; MODE C when instance_id + status are provided. If neither, ask for clarification (decision=`refuse`, reason=missing inputs).',
     inputs: [
-      { name: 'host',         type: 'hostname',                   required: true, desc: 'Target server' },
-      { name: 'request_type', type: 'enum<delete|reboot|patch>',  required: true, desc: 'Action requested' },
+      { name: 'host',         type: 'hostname',                   required: false, desc: 'Target server (Mode A)' },
+      { name: 'request_type', type: 'enum<delete|reboot|patch>',  required: false, desc: 'Action requested (Mode A)' },
+      { name: 'ritm_number',  type: 'string',                     required: false, desc: 'RITM#### to fulfil (Mode B)' },
+      { name: 'instance_id',  type: 'string',                     required: false, desc: 'Result instance id (Mode C — summary)' },
+      { name: 'fulfil_status', type: 'enum<success|failed>',      required: false, desc: 'Result status (Mode C — summary)' },
     ],
     outputs: [
-      { name: 'triage_report', type: 'json',  desc: 'CMDB record, owner, policy verdict, state snapshot' },
-      { name: 'owner_email',   type: 'email', desc: 'Owner of record' },
-      { name: 'policy_pass',   type: 'bool',  desc: 'True only if all gates passed' },
+      { name: 'triage_report', type: 'json',                              desc: 'CMDB record, owner, policy verdict, state snapshot (Mode A)' },
+      { name: 'owner_email',   type: 'email',                             desc: 'Owner of record (Mode A)' },
+      { name: 'policy_pass',   type: 'bool',                              desc: 'True only if all gates passed (Mode A)' },
+      { name: 'parsed_ritm',   type: 'json',                              desc: 'Parsed RITM payload (Mode B)' },
+      { name: 'cloud',         type: 'enum<aws|azure>',                   desc: 'Cloud provider detected from RITM (Mode B)' },
+      { name: 'missing_fields', type: 'string[]',                         desc: 'Mandatory fields missing from RITM (Mode B). Empty array means complete.' },
+      { name: 'decision',      type: 'enum<proceed|refuse|complete|missing>', desc: 'Routing decision' },
+      { name: 'summary',       type: 'markdown',                          desc: 'Final markdown summary (Mode C)' },
     ],
   },
   {
     id: 'servicenow-agent', name: 'ServiceNow Agent', kind: 'reviewer',
-    role: 'Files CHG; routes to CAB; returns approve / no-approve',
+    role: 'Queries / mutates ServiceNow records via the mcp__servicenow__* toolbelt (incidents, RITMs, CHGs, CMDB)',
     model: 'claude-sonnet-4-5',
     skills: ['query-servicenow'],
-    prompt: "You are the ServiceNow Agent. File a Change Request with the triage report attached, route it to the correct CAB group, then poll until a decision lands. Emit { decision: 'approve' | 'no-approve', chg_number, approver, reason }. On no-approve, halt the workflow.",
+    prompt:
+      'You are the ServiceNow Agent backed by the `mcp__servicenow__*` toolbelt.\n\n' +
+      'READ tools (always run first to gather context, never skip):\n' +
+      '  • `get_incident` (INC by number / sys_id)\n' +
+      '  • `search_incidents` (SNOW encoded query, e.g. `active=true^priorityIN1,2`)\n' +
+      '  • `get_ritm` (RITM by number / sys_id, optionally with catalog variables)\n' +
+      '  • `find_user` (sys_user; 7-strategy fallback covering name / email / user_name)\n' +
+      '  • `find_server` (CMDB hostname → cmdb_ci_server / cmdb_ci_computer)\n' +
+      '  • `get_changes_for_host` (CHGs touching a hostname in a date window)\n' +
+      '  • `list_tasks_for_ci` (task_ci → task walk for a hostname / CI)\n\n' +
+      'WRITE tools (only after explicit upstream authorisation):\n' +
+      '  • `create_incident`, `update_incident` (PATCH arbitrary fields by sys_id / number)\n' +
+      '  • `resolve_incident` (state=6, requires close_code + close_notes + assigned_to)\n' +
+      '  • `assign_ticket` (works on incident, change_request, change_task, sc_req_item, sc_task, problem, task — pick the right table)\n\n' +
+      'For a CHG flow (server deletion / host action):\n' +
+      '  1) `find_server` the host to verify the CMDB record + owner.\n' +
+      '  2) `get_changes_for_host` to detect collisions in a 7-day window.\n' +
+      '  3) File the change_request via the appropriate write tool (or fall back to a `query-servicenow` curl PATCH on `change_request`).\n' +
+      '  4) Attach triage evidence in `work_notes` via `update_incident`-style PATCH.\n' +
+      '  5) Emit `{ decision, ticket_number (CHG####), sys_id, approver, reason, summary }`. CAB approval is HUMAN — never pretend to approve.\n\n' +
+      'For an RITM fulfilment flow (catalog request → resource action):\n' +
+      '  1) `get_ritm` to read description + work_notes + state + assignment_group.\n' +
+      '  2) Verify mandatory fields (e.g. AWS account, region, OS, instance type for an EC2 ask). If anything missing, post a `work_notes` asking for them and STOP — do not invent values.\n' +
+      '  3) Hand the parsed RITM payload to the next agent (AWS / Deploy / etc).\n' +
+      '  4) On completion, PATCH `sc_req_item` `work_notes` with the result. The RITM `state` field is workflow-controlled — do NOT try to set it directly via REST/MCP, you will be silently blocked by a business rule.\n' +
+      '  5) Cascade-close pattern when the request is finished: close the linked `sc_task` first (state=3, close_notes filled, close_code if required), which cascades the RITM to Closed Complete. Then close the parent `sc_request`. Direct RITM closure fails for non-admin service accounts.\n\n' +
+      'Outputs you must always populate: `decision` (approve | no-approve | n/a), `ticket_number` (CHG#### / INC#### / RITM####), `sys_id`, `approver`, `reason`, `summary` (markdown the next agent can rely on). On no-approve OR missing-mandatory-fields, set decision accordingly so the workflow halts.',
     inputs: [
-      { name: 'triage_report', type: 'json',  required: true, desc: 'Evidence to attach' },
-      { name: 'owner_email',   type: 'email', required: true, desc: 'For CC' },
+      { name: 'triage_report', type: 'json',  required: false, desc: 'Evidence to attach (CHG flows). Omit for read-only / RITM flows.' },
+      { name: 'owner_email',   type: 'email', required: false, desc: 'For CC. Optional for non-CHG flows.' },
+      { name: 'ritm_number',   type: 'string', required: false, desc: 'RITM#### to fulfil (RITM flow). Mutually exclusive with CHG flow.' },
     ],
     outputs: [
-      { name: 'decision',   type: 'enum<approve|no-approve>', desc: 'CAB verdict' },
-      { name: 'chg_number', type: 'string',                   desc: 'ServiceNow CHG####' },
-      { name: 'approver',   type: 'string',                   desc: 'Approver name' },
-      { name: 'reason',     type: 'string',                   desc: 'Free-text reason' },
+      { name: 'decision',      type: 'enum<approve|no-approve|n/a>', desc: 'CAB verdict, or n/a for non-CHG flows' },
+      { name: 'ticket_number', type: 'string',                       desc: 'CHG####, INC####, or RITM#### depending on flow' },
+      { name: 'sys_id',        type: 'string',                       desc: 'Direct API addressability for the record' },
+      { name: 'approver',      type: 'string',                       desc: 'Approver name (CAB or assignment_group)' },
+      { name: 'reason',        type: 'string',                       desc: 'Free-text reason / verdict explanation' },
+      { name: 'summary',       type: 'markdown',                     desc: 'Markdown summary the next agent can read' },
     ],
   },
   {
     id: 'aws-agent', name: 'AWS Agent', kind: 'operator',
-    role: 'Executes AWS actions (server deletion, snapshot, EIP/ENI cleanup)',
+    role: 'Executes AWS actions — server deletion (CHG flow) or RITM-driven instance creation',
     model: 'claude-sonnet-4-5',
     skills: ['connecting-to-wk-aws'],
-    prompt: 'You are the AWS Agent. Only act after ServiceNow approves. Sequence: stop → snapshot (retain 30d) → terminate → release ENI/EIP. Log every API call to CloudTrail-tagged audit. If any step fails, roll back what you can and emit a structured failure report.',
+    prompt:
+      'You are the AWS Agent. Two modes — pick by inputs:\n\n' +
+      'MODE DELETE (host + decision=approve given): only act after ServiceNow approves. Sequence: stop → snapshot (retain 30d) → terminate → release ENI/EIP. Log every API call to CloudTrail-tagged audit. If any step fails, roll back what you can and emit a structured failure report. Decision: `terminated` | `failed` | `rolled-back`.\n\n' +
+      'MODE CREATE (parsed_ritm given): create the resource described in the RITM. For an EC2 ask:\n' +
+      '  1) Verify mandatory fields are present in `parsed_ritm` — account_id, region, os, instance_type. If ANY are missing, STOP. Emit `fulfil_status=failed`, `decision=missing`, `missing_fields` listing what is needed, and a `summary` explaining what to ask the user for. The L1 Triage Agent will route back to ServiceNow Agent to post a work_notes asking for the missing details — the user can re-run this workflow once the RITM is updated.\n' +
+      '  2) Connect to the WK account via the `connecting-to-wk-aws` skill (unset stale AWS_SESSION_TOKEN, look up role in WK-FedRoles, assume Operations role with a UNIQUE session name).\n' +
+      '  3) Find the matching AMI (Canonical owner for Ubuntu, Microsoft for Windows). Find default VPC + subnet + matching SG (must share VPC).\n' +
+      '  4) Run-instances with tags: Name=<RITM>, RITM=<RITM>, RequestedBy=<user>, OS=<os>, CreatedBy=CloudOps-Automation. Enforce IMDSv2 (HttpTokens=required).\n' +
+      '  5) On success emit `instance_id`, `audit_log_url`, `fulfil_status=success`, `decision=success`, and a `summary` markdown.\n' +
+      '  6) On failure emit `fulfil_status=failed` with the error and any rollback that happened.',
     inputs: [
-      { name: 'host',       type: 'hostname',                   required: true, desc: 'Target instance' },
-      { name: 'decision',   type: 'enum<approve|no-approve>',   required: true, desc: "Must be 'approve'" },
-      { name: 'chg_number', type: 'string',                     required: true, desc: 'Audit reference' },
+      { name: 'host',         type: 'hostname',                   required: false, desc: 'Target instance (DELETE mode)' },
+      { name: 'decision',     type: 'enum<approve|no-approve>',   required: false, desc: "Must be 'approve' (DELETE mode)" },
+      { name: 'chg_number',   type: 'string',                     required: false, desc: 'Audit reference (DELETE mode)' },
+      { name: 'parsed_ritm',  type: 'json',                       required: false, desc: 'Parsed RITM payload (CREATE mode) — contains account_id, region, os, instance_type, etc.' },
+      { name: 'ritm_number',  type: 'string',                     required: false, desc: 'RITM#### for tagging + audit (CREATE mode)' },
     ],
     outputs: [
-      { name: 'instance_id',   type: 'string', desc: 'EC2 instance id terminated' },
-      { name: 'snapshot_id',   type: 'string', desc: 'Snapshot retained' },
-      { name: 'audit_log_url', type: 'url',    desc: 'CloudTrail audit reference' },
-      { name: 'status',        type: 'enum<terminated|failed|rolled-back>', desc: 'Final state' },
+      { name: 'instance_id',    type: 'string',                                 desc: 'EC2 instance id (created or terminated depending on mode)' },
+      { name: 'snapshot_id',    type: 'string',                                 desc: 'Snapshot retained (DELETE mode)' },
+      { name: 'audit_log_url',  type: 'url',                                    desc: 'CloudTrail audit reference' },
+      { name: 'status',         type: 'enum<terminated|failed|rolled-back|created>', desc: 'Final state (DELETE mode)' },
+      { name: 'fulfil_status',  type: 'enum<success|failed>',                   desc: 'Outcome (CREATE mode)' },
+      { name: 'missing_fields', type: 'string[]',                               desc: 'Mandatory fields the RITM is missing (CREATE mode failure)' },
+      { name: 'decision',       type: 'enum<success|missing|failed>',           desc: 'Routing decision (CREATE mode)' },
+      { name: 'summary',        type: 'markdown',                               desc: 'Human-readable result' },
+    ],
+  },
+  {
+    id: 'azure-agent', name: 'Azure Agent', kind: 'operator',
+    role: 'Executes Azure actions — VM creation, deletion, resource group management (peer of AWS Agent)',
+    model: 'claude-sonnet-4-5',
+    skills: ['connect-to-wk-azure'],
+    prompt:
+      'You are the Azure Agent — peer of the AWS Agent for Azure subscriptions.\n\n' +
+      'MODE CREATE (parsed_ritm given): create the resource described in the RITM. For a VM ask:\n' +
+      '  1) Verify mandatory fields in `parsed_ritm` — subscription_id, resource_group, region, os, vm_size. If ANY missing, STOP. Emit `fulfil_status=failed`, `decision=missing`, `missing_fields`, and a `summary` describing what the user needs to add to the RITM.\n' +
+      '  2) Connect to the WK Azure subscription via the `connect-to-wk-azure` skill (service principal credentials).\n' +
+      '  3) Resolve the latest publisher image for the requested OS family (UbuntuServer / WindowsServer).\n' +
+      '  4) Create the VM with tags: RITM=<RITM>, RequestedBy=<user>, OS=<os>, CreatedBy=CloudOps-Automation.\n' +
+      '  5) On success emit `instance_id` (VM id), `audit_log_url` (Activity Log link), `fulfil_status=success`, `decision=success`, `summary`.\n' +
+      '  6) On failure emit `fulfil_status=failed` with the error and any rollback.\n\n' +
+      'Modes other than CREATE (delete, scale, etc.) follow the same input/output contract — emit the right decision so the workflow can route.',
+    inputs: [
+      { name: 'parsed_ritm',  type: 'json',         required: false, desc: 'Parsed RITM payload from L1 Triage' },
+      { name: 'ritm_number',  type: 'string',       required: false, desc: 'RITM#### for tagging + audit' },
+    ],
+    outputs: [
+      { name: 'instance_id',    type: 'string',                          desc: 'Azure VM id created' },
+      { name: 'audit_log_url',  type: 'url',                             desc: 'Azure Activity Log reference' },
+      { name: 'fulfil_status',  type: 'enum<success|failed>',            desc: 'Outcome' },
+      { name: 'missing_fields', type: 'string[]',                        desc: 'Mandatory fields the RITM is missing' },
+      { name: 'decision',       type: 'enum<success|missing|failed>',    desc: 'Routing decision' },
+      { name: 'summary',        type: 'markdown',                        desc: 'Human-readable result' },
     ],
   },
   {
@@ -171,9 +259,11 @@ export const DEFAULT_AGENT_ROSTER: Agent[] = [
   },
 ]
 
-// v3: agents now ship with typed inputs/outputs schemas so the workflow
-// canvas can show pin-to-pin wiring. Bump again for users on v2.
-const STORAGE_KEY = 'hive.agents.v3'
+// v4: L1 Triage and AWS Agent now have multi-mode prompts (RITM fulfilment +
+// CHG flow); ServiceNow Agent's outputs were renamed (chg_number →
+// ticket_number); a new Azure Agent ships in the roster. Bumped from v3 so
+// users get the updated defaults without needing to manually reset.
+const STORAGE_KEY = 'hive.agents.v4'
 
 export function loadAgents(): Agent[] {
   try {

@@ -66,7 +66,16 @@ fi
 # --- Configuration ---
 WK_REGION="us-east-1"
 FEDROLES_TABLE="WK-FedRoles"
-SESSION_NAME="wk-session"
+# Unique session name per invocation. Reusing a fixed name (e.g. "wk-session")
+# collapses parallel agent runs into one CloudTrail principal and destroys
+# audit attribution. $RANDOM is bash-builtin (no /dev/urandom round-trip);
+# epoch + $RANDOM stays unique even when two callers fire in the same second.
+SESSION_NAME="wk-${USER:-pi}-$(date +%s)-${RANDOM}"
+
+# Drop any stale assumed-role token from a previous invocation. Without this,
+# an expired AWS_SESSION_TOKEN inherited from the parent shell will be carried
+# into the new sts:AssumeRole call and break it (InvalidClientTokenId).
+unset AWS_SESSION_TOKEN
 
 # --- Input Validation ---
 ACCOUNT_NUMBER="${1:-}"

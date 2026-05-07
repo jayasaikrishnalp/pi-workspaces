@@ -128,10 +128,10 @@ export const DEFAULT_WORKFLOWS: Workflow[] = [
       // Re-confirm just re-runs L1 triage (same inputs from workflow)
       { to: 're-confirm.host',         from: { kind: 'workflow', field: 'host' } },
       { to: 're-confirm.request_type', from: { kind: 'workflow', field: 'request_type' } },
-      // AWS terminator gets host + the CAB decision + chg number
+      // AWS terminator gets host + the CAB decision + ticket number (CHG####)
       { to: 'terminate.host',       from: { kind: 'workflow', field: 'host' } },
       { to: 'terminate.decision',   from: { kind: 'step', stepId: 'file-chg', field: 'decision' } },
-      { to: 'terminate.chg_number', from: { kind: 'step', stepId: 'file-chg', field: 'chg_number' } },
+      { to: 'terminate.chg_number', from: { kind: 'step', stepId: 'file-chg', field: 'ticket_number' } },
       // Workflow outputs from the AWS step
       { to: 'out.status',        from: { kind: 'step', stepId: 'terminate', field: 'status' } },
       { to: 'out.snapshot_id',   from: { kind: 'step', stepId: 'terminate', field: 'snapshot_id' } },
@@ -186,13 +186,98 @@ export const DEFAULT_WORKFLOWS: Workflow[] = [
       { to: 'out.smoke_pass',  from: { kind: 'step', stepId: 'deploy',    field: 'smoke_pass' } },
     ],
   },
+  {
+    id: 'wf-ritm-fulfilment',
+    name: 'RITM Fulfilment (AWS / Azure)',
+    task:
+      `Fulfil a ServiceNow RITM end-to-end. L1 Triage parses the RITM and decides ` +
+      `if the mandatory fields are complete; AWS or Azure Agent creates the resource; ` +
+      `if mandatory fields are missing the workflow loops back to ServiceNow Agent which ` +
+      `posts a work_notes asking the user to update the RITM. Once the RITM is updated ` +
+      `the user re-runs the workflow and the agents pick up the new fields. ` +
+      `On success ServiceNow Agent posts the fulfilment work_notes and L1 Triage emits a final summary.`,
+    createdAt: '2026-05-07T18:00:00Z',
+    inputs: [
+      { name: 'ritm_number', type: 'string',         required: true,  desc: 'RITM#### to fulfil (e.g. RITM1873427)' },
+      { name: 'cloud',       type: 'enum<aws|azure>', required: false, desc: 'Override cloud — by default L1 Triage detects from the RITM description' },
+    ],
+    outputs: [
+      { name: 'status',      type: 'enum<success|missing|failed>', desc: 'Final fulfilment status' },
+      { name: 'instance_id', type: 'string',                       desc: 'Created resource id (success only)' },
+      { name: 'summary',     type: 'markdown',                     desc: 'End-of-run markdown summary' },
+    ],
+    steps: [
+      // 1) Parse the RITM, identify cloud + mandatory fields, route.
+      {
+        id: 'triage-ritm',
+        agentId: 'l1-triage-agent',
+        note: 'Read RITM via get_ritm; parse mandatory fields; emit decision (complete | missing).',
+        branches: { complete: 'cloud-fulfil', missing: 'snow-flag-missing' },
+      },
+      // 2a) Mandatory fields complete → try the cloud action. The workflow
+      //     defaults to AWS; users with Azure RITMs swap this step's agent
+      //     to azure-agent on the canvas.
+      {
+        id: 'cloud-fulfil',
+        agentId: 'aws-agent',
+        note: 'Create the resource described in the RITM. On missing fields, route back to ServiceNow Agent.',
+        branches: { success: 'snow-update-success', missing: 'snow-flag-missing', failed: 'snow-flag-missing' },
+      },
+      // 2b) Missing/failed → ServiceNow Agent posts a work_notes asking the
+      //     user to update the RITM. Workflow ends here; user re-runs once
+      //     the RITM is updated.
+      {
+        id: 'snow-flag-missing',
+        agentId: 'servicenow-agent',
+        note: 'Post a work_notes on the RITM listing the missing fields and asking the user to update. End the workflow — user re-runs after RITM is updated.',
+        next: 'end',
+      },
+      // 3) Success → ServiceNow Agent posts completion work_notes (and
+      //    cascade-closes the linked sc_task → RITM if the RITM is fully
+      //    fulfilled).
+      {
+        id: 'snow-update-success',
+        agentId: 'servicenow-agent',
+        note: 'Post completion work_notes with instance details. Cascade-close sc_task → RITM → sc_request when fully fulfilled.',
+      },
+      // 4) Final markdown summary the user can read in Slack.
+      { id: 'summary', agentId: 'l1-triage-agent', note: 'Mode C — write a markdown summary of the whole interaction for the user.', next: 'end' },
+    ],
+    bindings: [
+      // L1 Triage receives the RITM number from workflow input.
+      { to: 'triage-ritm.ritm_number', from: { kind: 'workflow', field: 'ritm_number' } },
+
+      // AWS Agent receives the parsed payload + RITM number for tagging.
+      { to: 'cloud-fulfil.parsed_ritm', from: { kind: 'step', stepId: 'triage-ritm', field: 'parsed_ritm' } },
+      { to: 'cloud-fulfil.ritm_number', from: { kind: 'workflow', field: 'ritm_number' } },
+
+      // ServiceNow Agent (missing path) — passes the RITM number + summary
+      // explaining what's missing. The summary comes from whichever step
+      // routed here (triage if RITM-level, cloud if cloud-level).
+      { to: 'snow-flag-missing.ritm_number', from: { kind: 'workflow', field: 'ritm_number' } },
+
+      // ServiceNow Agent (success path) — receives RITM + the AWS audit log
+      // url so the work_notes can link to it.
+      { to: 'snow-update-success.ritm_number', from: { kind: 'workflow', field: 'ritm_number' } },
+
+      // Final summary step — the L1 Triage Agent in Mode C reads the
+      // instance_id + status from the AWS step and emits a markdown summary.
+      { to: 'summary.instance_id',   from: { kind: 'step', stepId: 'cloud-fulfil', field: 'instance_id' } },
+      { to: 'summary.fulfil_status', from: { kind: 'step', stepId: 'cloud-fulfil', field: 'fulfil_status' } },
+      { to: 'summary.ritm_number',   from: { kind: 'workflow', field: 'ritm_number' } },
+
+      // Workflow-level outputs.
+      { to: 'out.status',      from: { kind: 'step', stepId: 'cloud-fulfil', field: 'fulfil_status' } },
+      { to: 'out.instance_id', from: { kind: 'step', stepId: 'cloud-fulfil', field: 'instance_id' } },
+      { to: 'out.summary',     from: { kind: 'step', stepId: 'summary',      field: 'summary' } },
+    ],
+  },
 ]
 
-// v4 introduces typed inputs/outputs/bindings on workflows. Bump key so
-// users with stale localStorage from v3 get the fresh seeded workflows
-// (cloudops-dashboard with full pin-to-pin wiring + server-deletion with
-// typed bindings).
-const STORAGE_KEY = 'hive.workflows.v4'
+// v5 ships the RITM Fulfilment workflow + the ticket_number rename + the
+// extended L1/AWS/Azure agent contracts. Bumped from v4 so users get the
+// new default workflow without manually clearing localStorage.
+const STORAGE_KEY = 'hive.workflows.v5'
 
 export function loadWorkflows(): Workflow[] {
   try {

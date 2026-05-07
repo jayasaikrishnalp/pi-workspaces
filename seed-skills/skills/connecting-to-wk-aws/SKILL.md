@@ -151,9 +151,20 @@ Select the role based on the task:
 - DNS changes → **DNS**
 
 ```bash
+# IMPORTANT: drop any stale assumed-role token before STS, otherwise an
+# expired AWS_SESSION_TOKEN from a previous step will be carried into the
+# new assume-role call and break it (InvalidClientTokenId / wrong account).
+unset AWS_SESSION_TOKEN
+
+# Unique session name per call. Reusing a fixed name (e.g. "wk-session")
+# collapses parallel agent invocations into a single CloudTrail principal
+# and destroys audit attribution. $RANDOM + epoch keeps it unique even
+# under parallel runs.
+SESSION_NAME="wk-${USER:-pi}-$(date +%s)-${RANDOM}"
+
 CREDS=$(aws sts assume-role \
   --role-arn "ROLE_ARN_FROM_STEP_1" \
-  --role-session-name wk-session \
+  --role-session-name "$SESSION_NAME" \
   --output json)
 
 export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | python3 -c "import sys,json; print(json.load(sys.stdin)['Credentials']['AccessKeyId'])")
@@ -172,8 +183,10 @@ export AWS_SESSION_TOKEN=$(echo "$CREDS" | python3 -c "import sys,json; print(js
 **CRITICAL**: The assumed role credentials are environment variables and only live within a single Bash tool call. You MUST combine the assume-role AND the actual AWS command(s) in the **same single Bash invocation**. If you split them across separate Bash calls, the credentials will be lost and commands will fail silently or use wrong credentials.
 
 ```bash
-# CORRECT — assume + execute in ONE Bash call
-CREDS=$(aws sts assume-role --role-arn "ROLE_ARN" --role-session-name wk-session --output json) && \
+# CORRECT — drop stale token, assume + execute in ONE Bash call
+unset AWS_SESSION_TOKEN && \
+SESSION_NAME="wk-${USER:-pi}-$(date +%s)-${RANDOM}" && \
+CREDS=$(aws sts assume-role --role-arn "ROLE_ARN" --role-session-name "$SESSION_NAME" --output json) && \
 export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | python3 -c "import sys,json; print(json.load(sys.stdin)['Credentials']['AccessKeyId'])") && \
 export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | python3 -c "import sys,json; print(json.load(sys.stdin)['Credentials']['SecretAccessKey'])") && \
 export AWS_SESSION_TOKEN=$(echo "$CREDS" | python3 -c "import sys,json; print(json.load(sys.stdin)['Credentials']['SessionToken'])") && \
@@ -238,3 +251,5 @@ done
 4. **Default to Operations role** unless the task specifically requires another role type.
 5. **Always combine assume-role + commands in a single Bash call** to prevent credential loss between shell invocations.
 6. **STS sessions are temporary (1 hour)** — `unset` the assumed-role env vars and re-run Step 0.5 + Step 2 to get a fresh hour.
+7. **Always `unset AWS_SESSION_TOKEN` before `aws sts assume-role`** — a stale token from a previous invocation will be inherited and silently break the new STS call (`InvalidClientTokenId`). The skill now does this in every assume-role example; do the same in any custom flow.
+8. **Never reuse `--role-session-name`** — a fixed value like `wk-session` collapses parallel agent runs into a single CloudTrail principal, destroying audit attribution and risking STS rate-limit/race issues. Use the `wk-${USER:-pi}-$(date +%s)-${RANDOM}` formula (or another guaranteed-unique scheme).

@@ -1,45 +1,85 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useApi } from '../../hooks/useApi'
 import { getKbGraph, createSkill, updateSkill, getKbSkill, type SkillNode, type KbDetail } from '../../lib/api'
 import { useEffect } from 'react'
+import { Icons } from '../icons/Icons'
+import './skills-grid.css'
 
 export function SkillsScreen(): JSX.Element {
   const list = useApi('skills.list', getKbGraph)
   const [selected, setSelected] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [query, setQuery] = useState('')
   const skills: SkillNode[] = (list.data?.nodes ?? []).filter((n) => n.source === 'skill')
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return skills
+    return skills.filter((s) =>
+      s.name.toLowerCase().includes(q) ||
+      (s.description ?? '').toLowerCase().includes(q),
+    )
+  }, [skills, query])
 
   return (
-    <div className="kb-screen" data-testid="skills">
-      <div className="kb-header">
-        <h2>Skills</h2>
-        <div className="kb-meta">{skills.length} on disk · <code>{'<kbRoot>/skills/<name>/SKILL.md'}</code></div>
-        <button className="btn btn-primary" onClick={() => setCreating(true)} data-testid="skills-new">+ new skill</button>
-      </div>
-      <div className="kb-2col">
-        <div className="kb-list" data-testid="skills-list">
-          {skills.length === 0 ? <div className="dash-empty">no skills yet</div> : (
-            skills.map((s) => (
-              <button
-                key={s.name}
-                className={`kb-list-row ${selected === s.name ? 'active' : ''}`}
-                onClick={() => setSelected(s.name)}
-                data-testid={`skill-list-${s.name}`}
-              >
-                <div className="kb-list-name">{s.name}</div>
-                {s.description ? <div className="kb-list-desc">{s.description}</div> : null}
-              </button>
-            ))
-          )}
+    <div className="kb-screen skills-screen" data-testid="skills">
+      <div className="skills-header">
+        <div className="skills-header-titles">
+          <h2 className="skills-title">Skills</h2>
+          <div className="skills-sub">
+            {skills.length} skill{skills.length === 1 ? '' : 's'} on disk · invoke any of them from chat with <code>/&lt;skill-name&gt;</code>
+          </div>
         </div>
-        <div className="kb-detail-pane">
-          {selected ? (
+        <div className="skills-header-actions">
+          <div className="skills-search">
+            <Icons.search size={12} />
+            <input
+              type="text"
+              placeholder="Filter skills…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              data-testid="skills-search"
+            />
+          </div>
+          <button className="skills-new-btn" onClick={() => setCreating(true)} data-testid="skills-new">
+            <Icons.plus size={12} /> New skill
+          </button>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="skills-empty">
+          {query ? `No skills match "${query}".` : 'No skills yet — click "New skill" to create one.'}
+        </div>
+      ) : (
+        <div className="skills-grid" data-testid="skills-list">
+          {filtered.map((s) => (
+            <button
+              key={s.name}
+              className="skill-card"
+              onClick={() => setSelected(s.name)}
+              data-testid={`skill-list-${s.name}`}
+            >
+              <span className="skill-card-icon"><Icons.book size={14} /></span>
+              <div className="skill-card-body">
+                <div className="skill-card-name">{s.name}</div>
+                <div className="skill-card-desc">
+                  {s.description || <span className="skill-card-desc-empty">no description</span>}
+                </div>
+              </div>
+              <span className="skill-card-chev"><Icons.chev size={11} /></span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {selected ? (
+        <div className="kb-modal-shade" onClick={() => setSelected(null)}>
+          <div className="skill-editor-pane" onClick={(e) => e.stopPropagation()}>
             <SkillEditor name={selected} onClose={() => setSelected(null)} onSaved={() => list.reload()} />
-          ) : (
-            <div className="dash-empty">Select a skill on the left to view + edit.</div>
-          )}
+          </div>
         </div>
-      </div>
+      ) : null}
+
       {creating ? (
         <SkillCreateModal onClose={() => setCreating(false)} onCreated={(n) => { list.reload(); setCreating(false); setSelected(n) }} />
       ) : null}
