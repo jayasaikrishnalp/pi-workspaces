@@ -93,6 +93,19 @@ export interface WorkflowRunnerDeps {
   /** Executor used when the runner runs each step. Tests inject a simulated one;
    *  commit 3 swaps in the real pi-bridge executor. */
   executor?: AgentStepExecutor
+  /** Optional fire-after-run hook. Called once for EVERY terminal status
+   *  (completed / failed / cancelled). Errors thrown here are caught and
+   *  logged; they never surface to the user. The auto-skill-review system
+   *  uses this to spawn a follow-up review run. */
+  onRunComplete?: (info: RunCompleteInfo) => void | Promise<void>
+}
+
+export interface RunCompleteInfo {
+  runId: string
+  workflowId: string
+  workflowName: string | null
+  status: 'completed' | 'failed' | 'cancelled'
+  triggeredBy: string | null
 }
 
 /* ===== Decision token parser ===== */
@@ -230,6 +243,13 @@ export class WorkflowRunner {
     this.executor = executor
   }
 
+  /** Late-binding setter for the run-complete callback. Used by wiring.ts to
+   *  attach the WorkflowReviewRunner after both objects are constructed
+   *  (the review runner depends on this runner for `start()` calls). */
+  setOnRunComplete(cb: WorkflowRunnerDeps['onRunComplete']): void {
+    this.deps = { ...this.deps, onRunComplete: cb }
+  }
+
   /** Spawn a new run. Returns the runId; execution proceeds async. */
   async start(args: RunnerStartArgs): Promise<string> {
     const { workflow, agents } = args
@@ -275,13 +295,42 @@ export class WorkflowRunner {
     })
     const bus = this.deps.bus.getOrCreate(runId)
 
-    void this.execute(runId, workflow, agentMap, bus, args.inputs).catch((err) => {
-      console.error(`[workflow-runner] run ${runId} crashed:`, err)
-      const msg = (err as Error).message
-      this.deps.store.setRunStatus(runId, 'failed', { error: msg })
-      bus.emit({ kind: 'run.end', runId, status: 'failed', error: msg, ts: Date.now() })
-      this.deps.bus.markClosed(runId)
-    })
+    void this.execute(runId, workflow, agentMap, bus, args.inputs)
+      .catch((err) => {
+        console.error(`[workflow-runner] run ${runId} crashed:`, err)
+        const msg = (err as Error).message
+        this.deps.store.setRunStatus(runId, 'failed', { error: msg })
+        bus.emit({ kind: 'run.end', runId, status: 'failed', error: msg, ts: Date.now() })
+        this.deps.bus.markClosed(runId)
+      })
+      .finally(() => {
+        // Fire onRunComplete from a try/catch — never surface to user.
+        // We re-read the final run row so the callback gets the canonical
+        // status (completed | failed | cancelled), not whatever this thread
+        // last touched.
+        try {
+          const cb = this.deps.onRunComplete
+          if (!cb) return
+          const finalRun = this.deps.store.getRun(runId)
+          if (!finalRun) return
+          const status = finalRun.status as 'completed' | 'failed' | 'cancelled' | 'queued' | 'running'
+          if (status !== 'completed' && status !== 'failed' && status !== 'cancelled') return
+          // Don't await — the callback runs in the background. Hive's review
+          // workflow itself goes through this runner; awaiting would
+          // sequentialise unrelated runs and block tests.
+          Promise.resolve(cb({
+            runId,
+            workflowId: finalRun.workflow,
+            workflowName: finalRun.workflow_name,
+            status,
+            triggeredBy: finalRun.triggered_by,
+          })).catch((err) => {
+            console.error(`[workflow-runner] onRunComplete threw for ${runId}:`, err)
+          })
+        } catch (err) {
+          console.error(`[workflow-runner] onRunComplete dispatch failed for ${runId}:`, err)
+        }
+      })
     return runId
   }
 

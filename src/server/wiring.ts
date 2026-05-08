@@ -27,6 +27,7 @@ import { WikiWatcher } from './wiki-watcher.js'
 import { WorkflowRunsStore } from './workflow-runs-store.js'
 import { WorkflowRunBusRegistry } from './workflow-run-bus.js'
 import { WorkflowRunner } from './workflow-runner.js'
+import { WorkflowReviewRunner } from './workflow-review-runner.js'
 import { PiBridgeStepExecutor } from './pi-bridge-step-executor.js'
 import type { SessionInfo } from '../types/run.js'
 
@@ -291,6 +292,19 @@ export function getWiring(options: WiringOptions = {}): Wiring {
       // replace via runner.setExecutor(...).
       executor: new PiBridgeStepExecutor({ bridge, runStore, chatBus: bus }),
     })
+
+    // Phase 3 — autonomous skill / memory review on run completion.
+    // Opt-in via env var so existing demos / hackathons aren't perturbed
+    // and so a misbehaving review prompt can be shut off in seconds
+    // without a redeploy.
+    if (process.env.HIVE_AUTO_SKILL_REVIEW === '1') {
+      const reviewRunner = new WorkflowReviewRunner({
+        runner: workflowRunner,
+        store: workflowRunsStore,
+      })
+      workflowRunner.setOnRunComplete(reviewRunner.handleRunComplete)
+      console.log('[wiring] auto-skill-review ENABLED — every completed user run will spawn a background review.')
+    }
   }
 
   const w: Wiring = {
