@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
+import { applyFuzzyPatch, type FuzzyStrategy } from './fuzzy-match.js'
+
 export const SKILL_NAME_RE = /^[a-z][a-z0-9-]{0,63}$/
 /**
  * Spec says "characters" — JS-string-length, not UTF-8 byte count. A multibyte
@@ -36,6 +38,8 @@ export type SkillWriteErrorCode =
   // Shared
   | 'INVALID_FRONTMATTER'
   | 'BODY_TOO_LARGE'
+  | 'PATCH_NO_MATCH'
+  | 'PATCH_AMBIGUOUS'
   | 'INTERNAL'
 
 export class SkillWriteError extends Error {
@@ -206,4 +210,100 @@ function escapeScalar(s: string): string {
     return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
   }
   return s
+}
+
+/* ===== Patch ===== */
+
+export interface PatchSkillInput {
+  /** Skill kebab-name (the directory name). */
+  name: string
+  /** Verbatim text to find. Empty rejects with PATCH_NO_MATCH. */
+  oldString: string
+  /** Replacement text. */
+  newString: string
+  /**
+   * Path RELATIVE to the skill directory. Defaults to "SKILL.md". Set to
+   * "references/foo.md" / "templates/x.txt" / etc. to patch a sidecar file.
+   * Path traversal (`..`) is rejected.
+   */
+  filePath?: string
+  /** When false (default), multiple matches fail with PATCH_AMBIGUOUS.
+   *  When true, replace every match. */
+  replaceAll?: boolean
+}
+
+export interface PatchSkillResult {
+  /** "<name>/<filePath>" — relative to skillsDir. */
+  relPath: string
+  /** Absolute path on disk. */
+  absPath: string
+  /** Number of replacements applied. */
+  replacements: number
+  /** Which fuzzy-match strategy succeeded. */
+  strategy: FuzzyStrategy
+}
+
+/**
+ * Surgically edit a single file inside a skill directory using the fuzzy-match
+ * strategy chain. Atomic: tmp + rename. Returns the matched strategy so the
+ * caller can surface it for transparency / debugging.
+ */
+export async function patchSkillFile(
+  skillsDir: string,
+  input: PatchSkillInput,
+): Promise<PatchSkillResult> {
+  if (!SKILL_NAME_RE.test(input.name)) {
+    throw new SkillWriteError(
+      'INVALID_SKILL_NAME',
+      `name must match ${SKILL_NAME_RE}; got ${JSON.stringify(input.name)}`,
+    )
+  }
+  const fileRel = input.filePath ?? 'SKILL.md'
+  // Defense against `../` escape: normalize and reject anything that would
+  // resolve outside the skill directory.
+  const normalized = path.posix.normalize(fileRel.replace(/\\/g, '/'))
+  if (normalized.startsWith('../') || normalized === '..' || normalized.startsWith('/')) {
+    throw new SkillWriteError('INVALID_FRONTMATTER', `file_path "${fileRel}" must be relative and inside the skill directory`)
+  }
+  const dir = path.join(skillsDir, input.name)
+  const abs = path.join(dir, normalized)
+  // Read existing file (404 → UNKNOWN_SKILL when patching SKILL.md, since
+  // the skill itself doesn't exist; otherwise UNKNOWN_SKILL is still the
+  // right code — there's no separate UNKNOWN_FILE in the catalog).
+  let existing: string
+  try {
+    existing = await fs.readFile(abs, 'utf8')
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      throw new SkillWriteError('UNKNOWN_SKILL', `skill ${input.name}/${normalized} does not exist`)
+    }
+    throw new SkillWriteError('INTERNAL', `read failed: ${(err as Error).message}`)
+  }
+  const result = applyFuzzyPatch(existing, input.oldString, input.newString, {
+    replaceAll: input.replaceAll === true,
+  })
+  if (result.replacements === 0 || result.strategy === null) {
+    // Distinguish ambiguous-match (multiple) from no-match.
+    if (result.error && /matches/.test(result.error)) {
+      throw new SkillWriteError('PATCH_AMBIGUOUS', result.error)
+    }
+    throw new SkillWriteError('PATCH_NO_MATCH', result.error ?? 'no match for old_string')
+  }
+  if (result.content.length > MAX_BODY_CHARS && normalized === 'SKILL.md') {
+    throw new SkillWriteError('BODY_TOO_LARGE', `patched SKILL.md would exceed ${MAX_BODY_CHARS} characters`)
+  }
+  const tmp = `${abs}.tmp.${process.pid}.${Date.now()}`
+  try {
+    await fs.writeFile(tmp, result.content)
+    await fs.rename(tmp, abs)
+  } catch (err) {
+    await fs.unlink(tmp).catch(() => undefined)
+    throw new SkillWriteError('INTERNAL', `write failed: ${(err as Error).message}`)
+  }
+  return {
+    relPath: `${input.name}/${normalized}`,
+    absPath: abs,
+    replacements: result.replacements,
+    strategy: result.strategy,
+  }
 }

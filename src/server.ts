@@ -45,6 +45,7 @@ import {
 import {
   handleSkillsCreate,
   handleSkillsUpdate,
+  handleSkillsPatch,
   handleKbSkillGet,
   SKILLS_CREATE_PATH,
   SKILLS_DETAIL_PATTERN,
@@ -70,6 +71,7 @@ import {
   handleMemoryList,
   handleMemoryRead,
   handleMemoryWrite,
+  handleMemoryDelete,
   MEMORY_PATH,
   MEMORY_DETAIL_PATTERN,
 } from './routes/memory.js'
@@ -172,6 +174,7 @@ const ROUTES: Route[] = [
   // Stage 6 routes — skill creation + read + update.
   { method: 'POST', pattern: SKILLS_CREATE_PATH, handler: handleSkillsCreate },
   { method: 'PUT', pattern: SKILLS_DETAIL_PATTERN, handler: handleSkillsUpdate },
+  { method: 'PATCH', pattern: SKILLS_DETAIL_PATTERN, handler: handleSkillsPatch },
   { method: 'GET', pattern: KB_SKILL_GET_PATTERN, handler: handleKbSkillGet },
 
   // Change 1 routes — agents/workflows/memory/providers.
@@ -188,6 +191,7 @@ const ROUTES: Route[] = [
   { method: 'GET', pattern: MEMORY_PATH, handler: handleMemoryList },
   { method: 'GET', pattern: MEMORY_DETAIL_PATTERN, handler: handleMemoryRead },
   { method: 'PUT', pattern: MEMORY_DETAIL_PATTERN, handler: handleMemoryWrite },
+  { method: 'DELETE', pattern: MEMORY_DETAIL_PATTERN, handler: handleMemoryDelete },
 
   { method: 'GET', pattern: PROVIDERS_LIST_PATH, handler: handleProvidersList },
   { method: 'GET', pattern: PROVIDERS_ACTIVE_PATH, handler: handleProvidersActiveGet },

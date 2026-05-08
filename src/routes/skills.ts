@@ -12,6 +12,7 @@ import {
 import type { Wiring } from '../server/wiring.js'
 import {
   writeSkill,
+  patchSkillFile,
   SkillWriteError,
   SKILL_NAME_RE,
 } from '../server/skills-writer.js'
@@ -221,6 +222,87 @@ export async function handleSkillsUpdate(
         : err.code === 'BODY_TOO_LARGE' ? 400
         : err.code === 'INVALID_FRONTMATTER' ? 400
         : err.code === 'UNKNOWN_SKILL' ? 404
+        : 500
+      jsonError(res, status, err.code, err.message)
+      return
+    }
+    jsonError(res, 500, 'INTERNAL', (err as Error).message)
+  }
+}
+
+/**
+ * PATCH /api/skills/:name with body { old_string, new_string, file_path?, replace_all? }
+ * Applies a fuzzy find-and-replace to the skill's SKILL.md (or a sidecar
+ * file under the skill directory). Mirrors the surgical-edit semantics
+ * agents are used to from Anthropic's Edit tool: byte-perfect first, fall
+ * through to whitespace / unicode / line-similarity strategies.
+ */
+export async function handleSkillsPatch(
+  req: IncomingMessage,
+  res: ServerResponse,
+  w: Wiring,
+): Promise<void> {
+  const params = matchPath(SKILLS_DETAIL_PATTERN, parsePath(req.url))
+  if (!params || !params.name) {
+    jsonError(res, 404, 'NOT_FOUND', 'unknown skills detail path')
+    return
+  }
+  const name: string = params.name
+  if (!SKILL_NAME_RE.test(name)) {
+    jsonError(res, 400, 'INVALID_SKILL_NAME', `name must match ${SKILL_NAME_RE}`)
+    return
+  }
+  let body: unknown
+  try {
+    body = await readJsonBody(req)
+  } catch (err) {
+    jsonError(res, 400, 'BAD_REQUEST', (err as Error).message)
+    return
+  }
+  if (!body || typeof body !== 'object') {
+    jsonError(res, 400, 'BAD_REQUEST', 'body must be a JSON object')
+    return
+  }
+  const { old_string, new_string, file_path, replace_all } = body as Record<string, unknown>
+  if (typeof old_string !== 'string' || old_string.length === 0) {
+    jsonError(res, 400, 'BAD_REQUEST', 'old_string must be a non-empty string')
+    return
+  }
+  if (typeof new_string !== 'string') {
+    jsonError(res, 400, 'BAD_REQUEST', 'new_string must be a string (use "" to delete)')
+    return
+  }
+  if (file_path !== undefined && typeof file_path !== 'string') {
+    jsonError(res, 400, 'BAD_REQUEST', 'file_path must be a string when provided')
+    return
+  }
+  if (replace_all !== undefined && typeof replace_all !== 'boolean') {
+    jsonError(res, 400, 'BAD_REQUEST', 'replace_all must be a boolean when provided')
+    return
+  }
+  try {
+    const result = await patchSkillFile(w.skillsDir, {
+      name,
+      oldString: old_string,
+      newString: new_string,
+      filePath: file_path as string | undefined,
+      replaceAll: replace_all as boolean | undefined,
+    })
+    jsonOk(res, 200, {
+      name,
+      path: result.relPath,
+      replacements: result.replacements,
+      strategy: result.strategy,
+    })
+  } catch (err) {
+    if (err instanceof SkillWriteError) {
+      const status =
+        err.code === 'INVALID_SKILL_NAME' ? 400
+        : err.code === 'INVALID_FRONTMATTER' ? 400
+        : err.code === 'BODY_TOO_LARGE' ? 400
+        : err.code === 'UNKNOWN_SKILL' ? 404
+        : err.code === 'PATCH_NO_MATCH' ? 404
+        : err.code === 'PATCH_AMBIGUOUS' ? 409
         : 500
       jsonError(res, status, err.code, err.message)
       return

@@ -12,6 +12,7 @@ import {
   listMemory,
   readMemory,
   writeMemory,
+  deleteMemory,
   MemoryError,
   MEMORY_NAME_RE,
 } from '../server/memory-writer.js'
@@ -82,11 +83,35 @@ export async function handleMemoryWrite(req: IncomingMessage, res: ServerRespons
   }
 }
 
+export async function handleMemoryDelete(req: IncomingMessage, res: ServerResponse, w: Wiring): Promise<void> {
+  const params = matchPath(MEMORY_DETAIL_PATTERN, parsePath(req.url))
+  if (!params || !params.name) {
+    jsonError(res, 404, 'NOT_FOUND', 'unknown memory path')
+    return
+  }
+  const name: string = params.name
+  if (!MEMORY_NAME_RE.test(name)) {
+    jsonError(res, 400, 'INVALID_MEMORY_NAME', `name must match ${MEMORY_NAME_RE}`)
+    return
+  }
+  try {
+    const removed = await deleteMemory(w.kbRoot, name)
+    if (!removed) {
+      jsonError(res, 404, 'UNKNOWN_MEMORY', `memory ${name} does not exist`)
+      return
+    }
+    jsonOk(res, 200, { name, deleted: true })
+  } catch (err) {
+    handleMemoryError(res, err)
+  }
+}
+
 function handleMemoryError(res: ServerResponse, err: unknown): void {
   if (err instanceof MemoryError) {
     const status =
       err.code === 'INVALID_MEMORY_NAME' ? 400
       : err.code === 'BODY_TOO_LARGE' ? 400
+      : err.code === 'MEMORY_BLOCKED' ? 400
       : err.code === 'UNKNOWN_MEMORY' ? 404
       : 500
     jsonError(res, status, err.code, err.message)
