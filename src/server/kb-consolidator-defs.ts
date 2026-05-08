@@ -58,8 +58,9 @@ export const CONSOLIDATOR_AGENT: AgentDef = {
     '\n' +
     'Both updates go through `mcp__hive-self__memory_write` which has a server-side threat scan. If the scan rejects you, the content is fine; revise prose to be more neutral.\n\n' +
     '### Step 3 — Audit + skill suggestions\n\n' +
-    'Append to `consolidator-log.md` a new dated section. Total content of that file should look like:\n' +
-    '    last_seen_index_hash: <new sha>\n' +
+    'CRITICAL ordering: write `consolidator-log.md` ONLY after you have written `user.md` and `project.md`. Then re-read `<index_path>` ONE MORE TIME via the bash tool to capture the LATEST `INDEX_HASH` (your user/project writes will have bumped it). Use THAT new hash as `last_seen_index_hash`. The consolidator-log entry itself is excluded from the hash by the index generator, so writing it does NOT change the hash and the next consolidator run will see "no work to do."\n\n' +
+    'Final `consolidator-log.md` content:\n' +
+    '    last_seen_index_hash: <FRESH sha — re-fetched after user/project writes>\n' +
     '    last_run_at: <iso>\n' +
     '    \n' +
     '    ## Run <iso>\n' +

@@ -87,7 +87,8 @@ export async function buildKbIndex(kbRoot: string): Promise<KbIndex> {
   lines.push(`## Memory (${memory.length})`)
   if (memory.length === 0) lines.push('_(none)_')
   for (const m of memory) {
-    lines.push(`- \`${m.name}\` (${m.size} bytes, mtime: ${isoOf(m.mtimeMs)})`)
+    const note = CONSOLIDATOR_OWN_ENTRIES.has(m.name) ? ' _[excluded from hash]_' : ''
+    lines.push(`- \`${m.name}\` (${m.size} bytes, mtime: ${isoOf(m.mtimeMs)})${note}`)
   }
   lines.push('')
 
@@ -105,9 +106,24 @@ export async function buildKbIndex(kbRoot: string): Promise<KbIndex> {
   }
   lines.push('')
 
-  // Body hashed BEFORE the timestamp / hash footer is appended.
   const body = lines.join('\n')
-  const hash = createHash('sha256').update(body).digest('hex')
+  // Hash a curated digest that excludes consolidator-managed memory entries
+  // (otherwise the consolidator's own writes bump the hash and re-trigger
+  // itself in a loop). The visible markdown still SHOWS those entries —
+  // we just don't let them participate in change detection.
+  const hashableSections: string[] = []
+  hashableSections.push(`skills:${skills.length}`)
+  for (const s of skills) hashableSections.push(`skill:${s.name}|${s.description}|${s.mtimeMs}`)
+  hashableSections.push(`memory:${memory.filter((m) => !CONSOLIDATOR_OWN_ENTRIES.has(m.name)).length}`)
+  for (const m of memory) {
+    if (CONSOLIDATOR_OWN_ENTRIES.has(m.name)) continue
+    hashableSections.push(`memory:${m.name}|${m.size}|${m.mtimeMs}`)
+  }
+  hashableSections.push(`agents:${agents.length}`)
+  for (const a of agents) hashableSections.push(`agent:${a.name}|${a.blurb}|${a.mtimeMs}`)
+  hashableSections.push(`workflows:${workflows.length}`)
+  for (const w of workflows) hashableSections.push(`workflow:${w.name}|${w.blurb}|${w.mtimeMs}`)
+  const hash = createHash('sha256').update(hashableSections.join('\n')).digest('hex')
 
   // Final markdown: prepend a generation timestamp comment that is OUTSIDE
   // the hashed body, then the body, then the hash footer.
@@ -180,6 +196,12 @@ async function readSkills(dir: string): Promise<SkillEntry[]> {
   out.sort((a, b) => a.name.localeCompare(b.name))
   return out
 }
+
+/** Memory entries the consolidator manages itself. They're rendered in
+ *  the index for operator visibility but excluded from the INDEX_HASH —
+ *  otherwise the consolidator's own writes would bump the hash and
+ *  re-trigger itself in a loop. */
+const CONSOLIDATOR_OWN_ENTRIES = new Set(['consolidator-log'])
 
 async function readMemory(dir: string): Promise<MemoryEntry[]> {
   const out: MemoryEntry[] = []
