@@ -76,6 +76,10 @@ import {
   MEMORY_DETAIL_PATTERN,
 } from './routes/memory.js'
 import {
+  handleKbConsolidate,
+  KB_CONSOLIDATE_PATH,
+} from './routes/kb-consolidate.js'
+import {
   handleProvidersList,
   handleProvidersActiveGet,
   handleProvidersActiveSet,
@@ -192,6 +196,9 @@ const ROUTES: Route[] = [
   { method: 'GET', pattern: MEMORY_DETAIL_PATTERN, handler: handleMemoryRead },
   { method: 'PUT', pattern: MEMORY_DETAIL_PATTERN, handler: handleMemoryWrite },
   { method: 'DELETE', pattern: MEMORY_DETAIL_PATTERN, handler: handleMemoryDelete },
+
+  // Phase 5 — kb consolidator (operator-triggered)
+  { method: 'POST', pattern: KB_CONSOLIDATE_PATH, handler: handleKbConsolidate },
 
   { method: 'GET', pattern: PROVIDERS_LIST_PATH, handler: handleProvidersList },
   { method: 'GET', pattern: PROVIDERS_ACTIVE_PATH, handler: handleProvidersActiveGet },

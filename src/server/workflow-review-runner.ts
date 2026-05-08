@@ -22,6 +22,10 @@ import {
   REVIEW_AGENT,
   REVIEW_TRIGGERED_BY,
 } from './auto-review-defs.js'
+import {
+  CONSOLIDATE_WORKFLOW_ID,
+  CONSOLIDATE_TRIGGERED_BY,
+} from './kb-consolidator-defs.js'
 import type { RunCompleteInfo, WorkflowRunner } from './workflow-runner.js'
 import type { WorkflowRunsStore } from './workflow-runs-store.js'
 
@@ -58,6 +62,11 @@ export class WorkflowReviewRunner {
     // Recursion guard #2 (defence in depth): triggeredBy may have been set
     // by another integration; ignore it as well.
     if (info.triggeredBy === REVIEW_TRIGGERED_BY) return
+    // The kb-consolidator (Phase 5) is also background machinery —
+    // operator-driven, distinct from the per-run review path. Its runs
+    // should NOT trigger a Phase-3 review of themselves.
+    if (info.workflowId === CONSOLIDATE_WORKFLOW_ID) return
+    if (info.triggeredBy === CONSOLIDATE_TRIGGERED_BY) return
     // Don't review queued runs that crashed before any work happened.
     if (info.status !== 'completed' && info.status !== 'failed' && info.status !== 'cancelled') return
 
