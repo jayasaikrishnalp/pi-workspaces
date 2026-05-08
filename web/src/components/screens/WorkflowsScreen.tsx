@@ -22,13 +22,20 @@ function iconFor(name: string) {
  *  fields can be left blank — the agent prompt should describe sensible
  *  defaults. */
 function areInputsValid(workflow: Workflow, draft: Record<string, string> | undefined): boolean {
-  if (!workflow.inputs || workflow.inputs.length === 0) return true
+  return missingRequiredInputs(workflow, draft).length === 0
+}
+
+/** Names of required inputs that are still empty. Used to gate Run + tell
+ *  the user exactly what to fill in. */
+function missingRequiredInputs(workflow: Workflow, draft: Record<string, string> | undefined): string[] {
+  if (!workflow.inputs || workflow.inputs.length === 0) return []
+  const missing: string[] = []
   for (const f of workflow.inputs) {
     if (!f.required) continue
     const v = draft?.[f.name]
-    if (!v || !v.trim()) return false
+    if (!v || !v.trim()) missing.push(f.name)
   }
-  return true
+  return missing
 }
 
 /** Human-readable "Xs/m/h/d ago". Shared with KnowledgeBaseScreen pattern. */
@@ -455,6 +462,28 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
 
                 {/* Inputs are edited inline on the START canvas node below.
                     No separate panel — keeps the screen compact. */}
+
+                {/* Always-visible hint when Run is gated by missing inputs. */}
+                {(() => {
+                  const missing = missingRequiredInputs(active, inputDrafts[active.id])
+                  if (missing.length === 0) return null
+                  return (
+                    <div
+                      className="wf-run-hint"
+                      data-testid="wf-run-hint"
+                      style={{ marginTop: 6, fontSize: 11, color: 'rgba(240, 197, 118, 0.9)' }}
+                    >
+                      Fill required input{missing.length > 1 ? 's' : ''}{' '}
+                      {missing.map((name, i) => (
+                        <span key={name}>
+                          {i > 0 ? ', ' : ''}
+                          <code style={{ background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>{name}</code>
+                        </span>
+                      ))}
+                      {' '}on the Workflow Input node to enable Run.
+                    </div>
+                  )
+                })()}
 
                 {startError ? <div className="chat-msg-error" data-testid="wf-start-error" style={{ marginTop: 8 }}>{startError}</div> : null}
               </div>
