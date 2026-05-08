@@ -111,6 +111,27 @@ export function loadSeedConfig(
     })
   }
 
+  // Hive self MCP. Locally hosted server under extensions/hive-self-mcp,
+  // exposes the workspace's own /api/memory + /api/skills endpoints as
+  // native MCP tools so pi can manage skills + memory natively (instead of
+  // shelling out to curl). Gated on WORKSPACE_INTERNAL_TOKEN being set —
+  // it is by wiring.ts at boot, so this is always true in production. The
+  // env gate exists so test wirings that intentionally don't set the token
+  // can opt out.
+  if (env.WORKSPACE_INTERNAL_TOKEN) {
+    const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..')
+    catalog.push({
+      id: 'hive-self',
+      kind: 'stdio',
+      command: process.execPath,
+      args: ['--import', 'tsx', path.join(repoRoot, 'extensions/hive-self-mcp/server.ts')],
+      // Forward the internal token so the child can authenticate back to
+      // localhost. We don't merge secretEnv here — the child only needs the
+      // token; everything else flows through process.env via the broker.
+      env: { WORKSPACE_INTERNAL_TOKEN: env.WORKSPACE_INTERNAL_TOKEN },
+    })
+  }
+
   return catalog
 }
 

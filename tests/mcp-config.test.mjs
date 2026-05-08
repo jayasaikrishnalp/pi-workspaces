@@ -127,3 +127,17 @@ test('loadSeedConfig: skips servicenow when any SNOW_* secret is missing', () =>
     assert.equal(cfg.find((c) => c.id === 'servicenow'), undefined, `must skip when ${missing} is absent`)
   }
 })
+
+test('loadSeedConfig: registers hive-self when WORKSPACE_INTERNAL_TOKEN is set', () => {
+  const cfg = loadSeedConfig({ REF_API_KEY: '', WORKSPACE_INTERNAL_TOKEN: 'tok-1' })
+  const self = cfg.find((c) => c.id === 'hive-self')
+  assert.ok(self, 'hive-self must be registered when the token is present')
+  assert.equal(self.kind, 'stdio')
+  assert.match(self.args[self.args.length - 1], /extensions\/hive-self-mcp\/server\.ts$/)
+  assert.equal(self.env.WORKSPACE_INTERNAL_TOKEN, 'tok-1')
+})
+
+test('loadSeedConfig: skips hive-self when WORKSPACE_INTERNAL_TOKEN is missing', () => {
+  const cfg = loadSeedConfig({ REF_API_KEY: '' })
+  assert.equal(cfg.find((c) => c.id === 'hive-self'), undefined)
+})

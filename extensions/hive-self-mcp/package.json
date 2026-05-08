@@ -1,0 +1,17 @@
+{
+  "name": "@cloudops/hive-self-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hive self MCP server. Exposes the workspace's own /api/memory + /api/skills + /api/kb endpoints as native MCP tools so pi can manage skills + memory without shelling out to curl. Talks back to the workspace over HTTP using WORKSPACE_INTERNAL_TOKEN.",
+  "bin": {
+    "hive-self-mcp": "./server.ts"
+  },
+  "scripts": {
+    "start": "node --import tsx ./server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "*",
+    "tsx": "*"
+  }
+}
