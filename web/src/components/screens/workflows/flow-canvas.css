@@ -573,17 +573,33 @@
 
 /* ===== Side panel ===== */
 .fc-sidepanel {
+  position: relative;             /* anchor for the resize handle */
   display: flex;
   flex-direction: column;
-  width: 560px;
-  min-width: 560px;
-  max-width: 50vw;
+  /* Width is driven by the modal grid column (--side-panel-width). */
+  width: 100%;
+  min-width: 0;
   background: rgba(15, 17, 22, 0.97);
   border-left: 1px solid var(--border, #3d3d3d);
   box-shadow: -16px 0 36px rgba(0,0,0,0.4);
   height: 100%;
   overflow: hidden;
 }
+/* Drag-to-resize handle on the LEFT edge — user widens the panel by
+ *  dragging left, narrows by dragging right. */
+.fc-sidepanel-resize {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 5;
+  transition: background 100ms;
+}
+.fc-sidepanel-resize:hover  { background: rgba(29,172,254,0.20); }
+.fc-sidepanel-resize:active { background: rgba(29,172,254,0.45); }
 .fc-sidepanel-head {
   display: flex;
   align-items: center;
@@ -948,10 +964,25 @@
   padding: 14px 20px 12px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
+/* Labelled form rows for the title + task inputs. The label makes it
+ *  obvious the heading-looking input is editable. */
+.wf-field {
+  display: block;
+  margin-bottom: 8px;
+}
+.wf-field-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+  padding: 0 4px 4px;
+}
 .wf-canvas-title-input {
   width: 100%;
-  background: transparent;
-  border: 1px solid transparent;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 6px;
   color: var(--text-primary);
   font-size: 18px;
@@ -968,8 +999,8 @@
 }
 .wf-canvas-task {
   width: 100%;
-  background: transparent;
-  border: 1px solid transparent;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 6px;
   color: rgba(255,255,255,0.78);
   font-size: 12px;
@@ -1297,6 +1328,7 @@
   to   { opacity: 1; }
 }
 .wf-editor-modal {
+  --side-panel-width: 280px;     /* palette default when no step is selected */
   position: fixed;
   top: 2.5vh;
   left: 2.5vw;
@@ -1304,7 +1336,7 @@
   height: 95vh;
   z-index: 101;
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 1fr var(--side-panel-width);
   background: rgba(15, 17, 22, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
@@ -1313,7 +1345,11 @@
   animation: wf-modal-pop 160ms ease;
 }
 .wf-editor-modal.has-side-panel {
-  grid-template-columns: 1fr 360px;
+  /* Default width when the side panel opens; user-resizable via the
+   * left-edge handle, persisted to localStorage as
+   * `hive.workflows.sidepanelWidth`. JS overrides this default by
+   * setting the CSS variable inline on the modal element. */
+  --side-panel-width: 560px;
 }
 @keyframes wf-modal-pop {
   from { opacity: 0; transform: scale(0.985); }

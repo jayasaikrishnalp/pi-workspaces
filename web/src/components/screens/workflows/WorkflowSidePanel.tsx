@@ -83,8 +83,37 @@ export function WorkflowSidePanel({
 
   const status = cardState?.status ?? 'idle'
 
+  // Drag-to-resize. Width persists across reloads.
+  const onResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const modal = (document.querySelector('.wf-editor-modal') as HTMLElement | null)
+    if (!modal) return
+    const startWidth = parseInt(getComputedStyle(modal).getPropertyValue('--side-panel-width') || '560', 10)
+    const onMove = (m: MouseEvent) => {
+      // Handle is on the LEFT edge — moving mouse LEFT widens the panel.
+      const next = Math.max(360, Math.min(1200, startWidth - (m.clientX - startX)))
+      modal.style.setProperty('--side-panel-width', `${next}px`)
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      const final = modal.style.getPropertyValue('--side-panel-width')
+      try { localStorage.setItem('hive.workflows.sidepanelWidth', final) } catch { /* ignore */ }
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
   return (
     <aside className="fc-sidepanel" data-testid={`fc-sidepanel-${step.id}`}>
+      <div
+        className="fc-sidepanel-resize"
+        onMouseDown={onResizeStart}
+        title="Drag left/right to resize"
+        aria-label="Resize side panel"
+      />
       <div className="fc-sidepanel-head">
         <span
           className="fc-sidepanel-icon"

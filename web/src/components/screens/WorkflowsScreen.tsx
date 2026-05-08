@@ -108,6 +108,15 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
   // Esc closes the editor modal and returns to the list view.
   useEffect(() => {
     if (viewMode !== 'editor') return
+    // Apply the user's saved side-panel width to the modal's CSS var so the
+    // panel opens at the size the user last left it.
+    try {
+      const saved = localStorage.getItem('hive.workflows.sidepanelWidth')
+      if (saved && /^\d+px$/.test(saved.trim())) {
+        const modal = document.querySelector('.wf-editor-modal') as HTMLElement | null
+        if (modal) modal.style.setProperty('--side-panel-width', saved)
+      }
+    } catch { /* ignore */ }
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeEditor()
     }
@@ -417,21 +426,27 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
             {/* CENTER — header + canvas (or YAML editor) */}
             <div className="wf-canvas-wrap">
               <div className="wf-canvas-header">
-                <input
-                  className="wf-canvas-title-input"
-                  value={active.name}
-                  onChange={(e) => updateActive({ name: e.target.value })}
-                  placeholder="Workflow name"
-                  data-testid="wf-name-input"
-                />
-                <textarea
-                  className="wf-canvas-task"
-                  rows={2}
-                  value={active.task}
-                  onChange={(e) => updateActive({ task: e.target.value })}
-                  placeholder="Describe the task this workflow accomplishes…"
-                  data-testid="wf-task-input"
-                />
+                <label className="wf-field">
+                  <span className="wf-field-label">Workflow name</span>
+                  <input
+                    className="wf-canvas-title-input"
+                    value={active.name}
+                    onChange={(e) => updateActive({ name: e.target.value })}
+                    placeholder="Untitled workflow — click to rename"
+                    data-testid="wf-name-input"
+                  />
+                </label>
+                <label className="wf-field">
+                  <span className="wf-field-label">What this workflow does</span>
+                  <textarea
+                    className="wf-canvas-task"
+                    rows={2}
+                    value={active.task}
+                    onChange={(e) => updateActive({ task: e.target.value })}
+                    placeholder="Describe the task this workflow accomplishes…"
+                    data-testid="wf-task-input"
+                  />
+                </label>
                 <div className="wf-canvas-meta">
                   <span className="wf-meta-pill">{active.steps.length} nodes</span>
                   <span className="wf-meta-pill">{(active.bindings?.length ?? 0)} bindings</span>
