@@ -120,12 +120,10 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   // secret-store 'change' events (Phase 3 — secret env injection).
   const authStore = getAuthStore({ workspaceRoot: root })
   const secretStore = getSecretStore({ workspaceRoot: root })
-  const bridge = getPiRpcBridge({ runStore, bus, tracker, secretStore })
-  const sessions = new Map<string, SessionInfo>()
-  const kbBus = getKbEventBus()
 
-  // Resolve kbRoot. New env var PI_WORKSPACE_KB_ROOT wins. Legacy
-  // PI_WORKSPACE_SKILLS_DIR (or options.skillsDir) implies kbRoot = its parent.
+  // Resolve kbRoot BEFORE the bridge — Phase 4's auto-memory injection
+  // reads `<kbRoot>/memory/{user,project}.md` on first prompt of each
+  // chat session, so the bridge needs the path at construction time.
   const kbRoot =
     options.kbRoot ??
     process.env.PI_WORKSPACE_KB_ROOT ??
@@ -136,6 +134,10 @@ export function getWiring(options: WiringOptions = {}): Wiring {
   const agentsDir = path.join(kbRoot, 'agents')
   const workflowsDir = path.join(kbRoot, 'workflows')
   const memoryDir = path.join(kbRoot, 'memory')
+
+  const bridge = getPiRpcBridge({ runStore, bus, tracker, secretStore, kbRoot })
+  const sessions = new Map<string, SessionInfo>()
+  const kbBus = getKbEventBus()
 
   let watcher: KbWatcher | null = null
   if (options.startWatcher !== false && process.env.PI_WORKSPACE_DISABLE_WATCHER !== '1') {

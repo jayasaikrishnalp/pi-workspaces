@@ -8,6 +8,7 @@ import type { RunStore } from './run-store.js'
 import type { ChatEventBus } from './chat-event-bus.js'
 import type { SendRunTracker } from './send-run-tracker.js'
 import { buildSecretEnv, type SecretStore } from './secret-store.js'
+import { loadMemorySnapshot, wrapPromptWithMemory } from './memory-snapshot.js'
 
 interface ActiveRun {
   runId: string
@@ -40,6 +41,11 @@ export interface BridgeDeps {
    *  used at every spawn to compute env-var injections from secret
    *  prefixes (aws., azure. → AWS_, ARM_, AZURE_). */
   secretStore?: SecretStore | null
+  /** Optional. When present, the bridge loads `<kbRoot>/memory/{user,project}.md`
+   *  on the first prompt of each chat session and prepends it to that
+   *  prompt inside a `<memory-context>` envelope. Mirrors Hermes' frozen
+   *  snapshot pattern; backwards-compat when omitted. */
+  kbRoot?: string | null
 }
 
 const RESTART_BACKOFF_MS = [0, 1_000, 5_000, 30_000]
@@ -62,6 +68,12 @@ export class PiRpcBridge {
    *  the still-running newSession() and lose it. */
   private pendingNewSession: { id: string; resolve: () => void; reject: (err: Error) => void } | null = null
   private static readonly NEW_SESSION_ACK_TIMEOUT_MS = 10_000
+  /** sessionKey of the last prompt that received a memory injection.
+   *  When the next send's sessionKey differs, we re-inject (Hermes'
+   *  frozen-snapshot pattern: one snapshot per Hive chat session). Null
+   *  means "next send will inject if a snapshot is available." Cleared
+   *  on child recycle so a fresh pi gets fresh memory. */
+  private memoryInjectedForSession: string | null = null
 
   constructor(deps: BridgeDeps) {
     this.deps = deps
@@ -82,6 +94,10 @@ export class PiRpcBridge {
     if (this.active) return                 // mid-run; let it finish
     const child = this.child
     if (!child || child.killed) return
+    // Memory snapshot is loaded per-session, but the gate tracks "did we
+    // already inject for this session?" — clear it so the fresh child gets
+    // a fresh injection on its first send.
+    this.memoryInjectedForSession = null
     try { child.kill('SIGTERM') } catch {}
   }
 
@@ -124,10 +140,31 @@ export class PiRpcBridge {
     }
     this.lastSessionKey = args.sessionKey
 
+    // Phase 4: prepend the memory snapshot on the first prompt of each
+    // Hive chat session. Loaded fresh per session so updates from the
+    // L1 review agent (or operator) land on the next session without a
+    // pi respawn. Mid-session prompts skip injection — keeps pi's prefix
+    // cache stable across the session and avoids token cost.
+    let promptToSend = args.prompt
+    if (this.memoryInjectedForSession !== args.sessionKey) {
+      try {
+        const snapshot = await loadMemorySnapshot(this.deps.kbRoot ?? null)
+        if (snapshot) {
+          promptToSend = wrapPromptWithMemory(snapshot, args.prompt)
+        }
+      } catch (err) {
+        // Memory injection must never block a chat. Log and proceed.
+        console.warn('[pi-rpc-bridge] memory snapshot load failed:', (err as Error).message)
+      }
+      // Mark even when snapshot is null so we don't re-attempt the disk
+      // read on every send within the session.
+      this.memoryInjectedForSession = args.sessionKey
+    }
+
     const command = JSON.stringify({
       id: args.runId,
       type: 'prompt',
-      message: args.prompt,
+      message: promptToSend,
     })
     this.child!.stdin!.write(command + '\n')
   }
@@ -439,6 +476,9 @@ export class PiRpcBridge {
     // Fresh child gets fresh state; the next send shouldn't think it owes pi
     // a new_session for the previous owner's sessionKey.
     this.lastSessionKey = null
+    // Same reasoning for memory: the new pi child has no recalled context;
+    // first send must inject again.
+    this.memoryInjectedForSession = null
     if (this.pendingNewSession) {
       const p = this.pendingNewSession
       this.pendingNewSession = null

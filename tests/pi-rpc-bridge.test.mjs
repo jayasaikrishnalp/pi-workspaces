@@ -766,3 +766,152 @@ test('bridge recycles pi child on secret-store change', async () => {
   await new Promise((r) => setImmediate(r))
   assert.equal(fake.killed, true, 'pi child must be recycled when secrets change')
 })
+
+// ---- Phase 4: auto-memory injection ----------------------------------------
+
+async function makeBridgeWithMemory({ user, project } = {}) {
+  const root = tmpStoreRoot()
+  await fs.promises.mkdir(path.join(root, 'memory'), { recursive: true })
+  if (user != null) await fs.promises.writeFile(path.join(root, 'memory', 'user.md'), user)
+  if (project != null) await fs.promises.writeFile(path.join(root, 'memory', 'project.md'), project)
+  const runStore = new RunStore({ root: path.join(root, 'runs') })
+  const bus = new ChatEventBus()
+  const tracker = new SendRunTracker()
+  let fake
+  const bridge = new PiRpcBridge({
+    runStore, bus, tracker,
+    kbRoot: root,
+    spawnPi: () => { fake = makeFakeChild(); return fake },
+  })
+  return { root, bridge, runStore, bus, tracker, getFake: () => fake }
+}
+
+/** Pull the latest `prompt` JSON line written to pi's stdin. */
+function lastPromptMessage(fake) {
+  for (let i = fake.linesIn.length - 1; i >= 0; i--) {
+    let parsed
+    try { parsed = JSON.parse(fake.linesIn[i]) } catch { continue }
+    if (parsed?.type === 'prompt') return parsed.message
+  }
+  return null
+}
+
+test('memory injection: first prompt of a session prepends <memory-context> wrap', async () => {
+  const ctx = await makeBridgeWithMemory({
+    user: 'prefers terse answers; lives in CET',
+    project: 'dev SNOW: https://devwolterskluwer.service-now.com',
+  })
+
+  ctx.tracker.start('s1', 'r1')
+  await ctx.runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'Look up RITM1873461' })
+  await ctx.bridge.send({ sessionKey: 's1', runId: 'r1', prompt: 'Look up RITM1873461' })
+
+  const fake = ctx.getFake()
+  const msg = lastPromptMessage(fake)
+  assert.ok(msg, 'pi must have received a prompt JSON line')
+  assert.match(msg, /^<memory-context>/, 'first session prompt must open with the envelope')
+  assert.match(msg, /\[System note:/, 'envelope must carry the system note')
+  assert.match(msg, /USER PROFILE/, 'user.md content must be rendered')
+  assert.match(msg, /prefers terse answers/, 'user.md body must be rendered')
+  assert.match(msg, /PROJECT FACTS/, 'project.md content must be rendered')
+  assert.match(msg, /Look up RITM1873461$/, 'user prompt must be the LAST thing in the message')
+})
+
+test('memory injection: second prompt of the SAME session is verbatim (no re-inject)', async () => {
+  const ctx = await makeBridgeWithMemory({ user: 'prefers terse answers' })
+  // First send completes a run.
+  ctx.tracker.start('s1', 'r1')
+  await ctx.runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'first' })
+  const done1 = waitForEvent(ctx.bus, 'run.completed')
+  await ctx.bridge.send({ sessionKey: 's1', runId: 'r1', prompt: 'first' })
+  const fake = ctx.getFake()
+  fake.pushJson({ id: 'r1', type: 'response', command: 'prompt', success: true })
+  fake.pushJson({ type: 'agent_start' })
+  fake.pushJson({ type: 'agent_end', messages: [] })
+  await done1
+
+  // Second send in the same session — should NOT re-inject.
+  ctx.tracker.start('s1', 'r2')
+  await ctx.runStore.startRun({ runId: 'r2', sessionKey: 's1', prompt: 'second' })
+  const done2 = waitForEvent(ctx.bus, 'run.completed')
+  await ctx.bridge.send({ sessionKey: 's1', runId: 'r2', prompt: 'second' })
+  fake.pushJson({ id: 'r2', type: 'response', command: 'prompt', success: true })
+  fake.pushJson({ type: 'agent_start' })
+  fake.pushJson({ type: 'agent_end', messages: [] })
+  await done2
+
+  const msg = lastPromptMessage(fake)
+  assert.equal(msg, 'second', 'second send in same session must be the bare user prompt')
+})
+
+test('memory injection: a session change triggers re-injection', async () => {
+  const ctx = await makeBridgeWithMemory({ user: 'prefers terse answers' })
+  ctx.tracker.start('s1', 'r1')
+  await ctx.runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'first' })
+  const done1 = waitForEvent(ctx.bus, 'run.completed')
+  await ctx.bridge.send({ sessionKey: 's1', runId: 'r1', prompt: 'first' })
+  const fake = ctx.getFake()
+  fake.pushJson({ id: 'r1', type: 'response', command: 'prompt', success: true })
+  fake.pushJson({ type: 'agent_start' })
+  fake.pushJson({ type: 'agent_end', messages: [] })
+  await done1
+
+  // Now send into a NEW session. Bridge will issue new_session first;
+  // we ack it, then send() continues with the (memory-wrapped) prompt.
+  // Pre-stage runStore.startRun so the IIFE doesn't race against pi's ack.
+  ctx.tracker.start('s2', 'r2')
+  await ctx.runStore.startRun({ runId: 'r2', sessionKey: 's2', prompt: 'second' })
+  const sendPromise = ctx.bridge.send({ sessionKey: 's2', runId: 'r2', prompt: 'second' })
+  // Ack the new_session RPC (id format documented in pi-rpc-bridge.ts:137).
+  await new Promise((r) => setImmediate(r))
+  fake.pushJson({ id: 'new-session-r2', type: 'response', command: 'new_session', success: true })
+  await sendPromise
+  fake.pushJson({ id: 'r2', type: 'response', command: 'prompt', success: true })
+  fake.pushJson({ type: 'agent_start' })
+  fake.pushJson({ type: 'agent_end', messages: [] })
+
+  const msg = lastPromptMessage(fake)
+  assert.match(msg, /^<memory-context>/, 'new session must re-inject the snapshot')
+  assert.match(msg, /prefers terse answers/)
+  assert.match(msg, /second$/)
+})
+
+test('memory injection: no kbRoot → bridge sends the prompt verbatim (back-compat)', async () => {
+  const root = tmpStoreRoot()
+  const runStore = new RunStore({ root: path.join(root, 'runs') })
+  const bus = new ChatEventBus()
+  const tracker = new SendRunTracker()
+  let fake
+  const bridge = new PiRpcBridge({
+    runStore, bus, tracker,
+    spawnPi: () => { fake = makeFakeChild(); return fake },
+    // intentionally NO kbRoot
+  })
+
+  tracker.start('s1', 'r1')
+  await runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'hi' })
+  await bridge.send({ sessionKey: 's1', runId: 'r1', prompt: 'hi' })
+
+  const msg = lastPromptMessage(fake)
+  assert.equal(msg, 'hi', 'no kbRoot means no envelope wrapping')
+})
+
+test('memory injection: kbRoot with no memory files → bridge sends verbatim', async () => {
+  // Fresh kbRoot, memory dir doesn't even exist.
+  const root = tmpStoreRoot()
+  const runStore = new RunStore({ root: path.join(root, 'runs') })
+  const bus = new ChatEventBus()
+  const tracker = new SendRunTracker()
+  let fake
+  const bridge = new PiRpcBridge({
+    runStore, bus, tracker, kbRoot: root,
+    spawnPi: () => { fake = makeFakeChild(); return fake },
+  })
+
+  tracker.start('s1', 'r1')
+  await runStore.startRun({ runId: 'r1', sessionKey: 's1', prompt: 'hi' })
+  await bridge.send({ sessionKey: 's1', runId: 'r1', prompt: 'hi' })
+
+  const msg = lastPromptMessage(fake)
+  assert.equal(msg, 'hi', 'absent memory files → no envelope')
+})
