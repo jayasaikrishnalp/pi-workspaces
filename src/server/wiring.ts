@@ -28,6 +28,7 @@ import { WorkflowRunsStore } from './workflow-runs-store.js'
 import { WorkflowRunBusRegistry } from './workflow-run-bus.js'
 import { WorkflowRunner } from './workflow-runner.js'
 import { WorkflowReviewRunner } from './workflow-review-runner.js'
+import { regenerateKbIndex } from './kb-index-generator.js'
 import { PiBridgeStepExecutor } from './pi-bridge-step-executor.js'
 import type { SessionInfo } from '../types/run.js'
 
@@ -146,6 +147,35 @@ export function getWiring(options: WiringOptions = {}): Wiring {
     void watcher.start().catch((err) => {
       console.error('[wiring] kb watcher failed to start:', err)
     })
+
+    // Phase 5 — auto-maintain `<kbRoot>/index.md`. The kb-consolidator
+    // agent reads only this file (and its INDEX_HASH footer) to decide
+    // whether the kb has changed since its last run; that makes the
+    // cheap path *very* cheap. Subscribe to kb events with a 500ms
+    // debounce, ignore self-writes (path: <kbRoot>/index.md, anything
+    // under .tmp.*), and regenerate.
+    const indexAbs = path.join(kbRoot, 'index.md')
+    let regenTimer: NodeJS.Timeout | null = null
+    let regenInFlight = false
+    const scheduleRegen = (): void => {
+      if (regenTimer) clearTimeout(regenTimer)
+      regenTimer = setTimeout(() => {
+        regenTimer = null
+        if (regenInFlight) return
+        regenInFlight = true
+        void regenerateKbIndex(kbRoot)
+          .catch((err) => console.error('[wiring] kb-index regenerate failed:', err))
+          .finally(() => { regenInFlight = false })
+      }, 500)
+    }
+    kbBus.subscribe((e) => {
+      if (e.path === indexAbs) return            // ignore our own writes
+      if (e.path.includes('.tmp.')) return       // ignore atomic-write tmp files
+      scheduleRegen()
+    })
+    // Build once at boot regardless of whether watcher fires.
+    void regenerateKbIndex(kbRoot)
+      .catch((err) => console.error('[wiring] initial kb-index build failed:', err))
   }
 
   // Confluence — must merge `process.env` with `buildSecretEnv(secretStore)`
