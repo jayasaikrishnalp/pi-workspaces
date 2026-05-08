@@ -16,6 +16,16 @@ import {
   MemoryError,
   MEMORY_NAME_RE,
 } from '../server/memory-writer.js'
+import { regenerateKbIndex } from '../server/kb-index-generator.js'
+
+/** Fire-and-forget index regen. Memory writes happen at .pi/memory which
+ *  the chokidar watcher ignores (dot-dir filter), so the route triggers
+ *  regen directly instead of relying on the watcher subscriber. */
+function bumpKbIndex(kbRoot: string): void {
+  void regenerateKbIndex(kbRoot).catch((err) => {
+    console.warn('[memory-route] kb-index regen failed:', (err as Error).message)
+  })
+}
 
 export const MEMORY_PATH = '/api/memory'
 export const MEMORY_DETAIL_PATTERN = '/api/memory/:name'
@@ -77,6 +87,7 @@ export async function handleMemoryWrite(req: IncomingMessage, res: ServerRespons
   }
   try {
     const entry = await writeMemory(w.kbRoot, name, content)
+    bumpKbIndex(w.kbRoot)
     jsonOk(res, 200, entry)
   } catch (err) {
     handleMemoryError(res, err)
@@ -100,6 +111,7 @@ export async function handleMemoryDelete(req: IncomingMessage, res: ServerRespon
       jsonError(res, 404, 'UNKNOWN_MEMORY', `memory ${name} does not exist`)
       return
     }
+    bumpKbIndex(w.kbRoot)
     jsonOk(res, 200, { name, deleted: true })
   } catch (err) {
     handleMemoryError(res, err)

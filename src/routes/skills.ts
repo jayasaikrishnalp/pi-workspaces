@@ -17,6 +17,17 @@ import {
   SKILL_NAME_RE,
 } from '../server/skills-writer.js'
 import { readKbFile, updateKbFile } from '../server/kb-writer.js'
+import { regenerateKbIndex } from '../server/kb-index-generator.js'
+
+/** Fire-and-forget index regen. Skills sit at <kbRoot>/skills (often a
+ *  symlink to outside the dot-dir, which the watcher catches), but we
+ *  trigger explicitly here too so the index is always in sync with the
+ *  most recent successful write. Idempotent — skip cost on no-change. */
+function bumpKbIndex(kbRoot: string): void {
+  void regenerateKbIndex(kbRoot).catch((err) => {
+    console.warn('[skills-route] kb-index regen failed:', (err as Error).message)
+  })
+}
 
 export const SKILLS_CREATE_PATH = '/api/skills'
 export const SKILLS_DETAIL_PATTERN = '/api/skills/:name'
@@ -58,6 +69,7 @@ export async function handleSkillsCreate(
       content: content as string | undefined,
       frontmatter: frontmatter as Record<string, unknown> | undefined,
     })
+    bumpKbIndex(w.kbRoot)
     jsonOk(res, 201, { name, path: result.relPath })
   } catch (err) {
     if (err instanceof SkillWriteError) {
@@ -214,6 +226,7 @@ export async function handleSkillsUpdate(
       existingFrontmatter: existing.frontmatter,
       existingBody: existing.body,
     })
+    bumpKbIndex(w.kbRoot)
     jsonOk(res, 200, { name, path: result.relPath })
   } catch (err) {
     if (err instanceof SkillWriteError) {
@@ -288,6 +301,7 @@ export async function handleSkillsPatch(
       filePath: file_path as string | undefined,
       replaceAll: replace_all as boolean | undefined,
     })
+    bumpKbIndex(w.kbRoot)
     jsonOk(res, 200, {
       name,
       path: result.relPath,
