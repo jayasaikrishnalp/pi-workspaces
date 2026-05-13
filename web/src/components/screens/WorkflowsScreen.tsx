@@ -458,6 +458,16 @@ export function WorkflowsScreen({ onRunStateChange }: Props = {}): JSX.Element {
                     onClick={() => { setShowYaml((s) => !s); setYamlError(null) }}
                     data-testid="wf-toggle-yaml"
                   >{showYaml ? 'Hide YAML' : 'Edit YAML'}</button>
+                  <button
+                    className="wf-action-btn"
+                    onClick={() => {
+                      saveWorkflows(workflows)
+                      setReconcileMsg(`saved "${active.name}"`)
+                      window.setTimeout(() => setReconcileMsg((m) => m === `saved "${active.name}"` ? null : m), 2000)
+                    }}
+                    data-testid="wf-save"
+                    title="Persist this workflow to local storage now (auto-save also runs on every edit)"
+                  >Save</button>
                   {runState.status === 'running' || runState.status === 'queued' ? (
                     <button
                       className="wf-action-btn"

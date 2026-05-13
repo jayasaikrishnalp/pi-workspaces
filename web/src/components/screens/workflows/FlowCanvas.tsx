@@ -570,6 +570,13 @@ function AddPopover({
 
 /* ===== Main ===== */
 
+// Hoisted to module scope: passing fresh object literals to <ReactFlow
+// nodeTypes={{...}}> on every parent render makes React Flow rebuild the
+// node components, which unmounts inputs and steals focus mid-keystroke.
+const NODE_TYPES = { workflowInput: StartNode, agent: AgentNode, workflowOutput: EndNode } as const
+const EDGE_TYPES = { flow: FlowEdge } as const
+const DEFAULT_EDGE_OPTIONS = { type: 'flow' as const }
+
 function InnerCanvas({
   workflow, agents, runState, onWorkflowChange, onOpenStep, selectedStepId,
   inputValues, onInputChange, onAddInput,
@@ -675,9 +682,9 @@ function InnerCanvas({
         nodes={liveNodes}
         edges={edges}
         onNodesChange={onNodesChange}
-        nodeTypes={{ workflowInput: StartNode, agent: AgentNode, workflowOutput: EndNode }}
-        edgeTypes={{ flow: FlowEdge }}
-        defaultEdgeOptions={{ type: 'flow' }}
+        nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
+        defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
         defaultViewport={{ x: 0, y: 0, zoom: 0.85 }}
         minZoom={0.3}
         maxZoom={1.5}
