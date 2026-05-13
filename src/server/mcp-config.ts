@@ -62,12 +62,6 @@ export function loadSeedConfig(
   const secretEnv = secretStore ? buildSecretEnv(secretStore) : {}
   const catalog: McpServerConfig[] = [
     {
-      id: 'ref',
-      kind: 'http',
-      url: 'https://api.ref.tools/mcp',
-      ...(refKey ? { headers: { 'x-ref-api-key': refKey } } : {}),
-    },
-    {
       id: 'context7',
       kind: 'stdio',
       command: 'npx',
@@ -75,6 +69,19 @@ export function loadSeedConfig(
       env: { ...secretEnv },
     },
   ]
+
+  // Ref documentation MCP — gated on REF_API_KEY being resolvable. Skipping
+  // the seed when no key is configured keeps the probe / UI clean for
+  // operators who only use the planning Ref product (registered as a
+  // user-defined `ref-plan` overlay) and don't have a docs key.
+  if (refKey) {
+    catalog.push({
+      id: 'ref',
+      kind: 'http',
+      url: 'https://api.ref.tools/mcp',
+      headers: { 'x-ref-api-key': refKey },
+    })
+  }
 
   // Atlassian (Jira + Confluence) MCP server. Only registered when:
   //   - uvx is installed (PATH search or UVX_BIN env)
